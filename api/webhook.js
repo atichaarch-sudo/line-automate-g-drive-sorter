@@ -478,7 +478,6 @@ async function classifyAndExtract(fileBytes, mimeType) {
     generationConfig: {
       response_mime_type: 'application/json',
       temperature: 0,
-      thinkingConfig: { thinkingBudget: 0 },
     },
   };
 
