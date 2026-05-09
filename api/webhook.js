@@ -132,13 +132,28 @@ async function handlePostback(event) {
 
   if (data.action !== 'save') return;
 
-  const SHEET_LINKED = ['invoice', 'recv-pos', 'shipping-cost'];
+  const SHEET_LINKED = ['invoice', 'shipping-cost'];
   const { messageId, category, dealer, date, amount, filename: customFilename, branch, billNo } = data;
+
+  if (category === 'recv-pos') {
+    try {
+      const { fileBytes, mimeType: ft } = await downloadByMessageId(messageId);
+      const fname = customFilename || buildFilename(dealer, date, amount, ft);
+      const { uploadedName, fileId } = await uploadToDrive(fileBytes, ft, fname, 'recv-pos');
+      const recvKey = billNo || 'รอเลข';
+      await updateSheetLink(recvKey, 'recv-pos', fileId, billNo, branch, dealer, amount, date);
+      await sendLineReply(replyToken, `✅ บันทึกแล้ว: recv-pos → ${uploadedName}`);
+    } catch (err) {
+      console.error('handlePostback recv-pos error:', err);
+      if (userId) await sendLinePush(userId, '❌ เกิดข้อผิดพลาด กรุณาลองใหม่');
+    }
+    return;
+  }
 
   if (SHEET_LINKED.includes(category)) {
     try {
       await redisSet(`recv_pending:${userId}`, { messageId, category, branch, billNo, dealer, date, amount, customFilename }, 300);
-      await sendLineReply(replyToken, '📋 พิมพ์เลข POS/RECV เพื่อลิงก์ในชีท\n(หรือพิมพ์ "skip" เพื่อบันทึกโดยไม่ลิงก์)');
+      await sendLineReply(replyToken, '📋 พิมพ์เลข RECV เพื่อลิงก์ในชีท\n(หรือพิมพ์ "skip" ถ้ายังไม่มีเลข)');
     } catch (err) {
       console.error('handlePostback recv_pending error:', err);
       if (userId) await sendLinePush(userId, '❌ เกิดข้อผิดพลาด กรุณาลองใหม่');
