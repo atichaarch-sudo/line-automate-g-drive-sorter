@@ -203,6 +203,7 @@ async function sendConfirmation(replyToken, messageId, category, dealer, date, a
   ];
 
   const proposed = buildFilename(dealer, date, amount, mimeType);
+  const recvLine = category === 'recv-pos' && billNo ? `\n🔢 เลข RECV: ${billNo}` : '';
   const resp = await fetch('https://api.line.me/v2/bot/message/reply', {
     method: 'POST',
     headers: {
@@ -214,7 +215,7 @@ async function sendConfirmation(replyToken, messageId, category, dealer, date, a
       messages: [
         {
           type: 'text',
-          text: `📄 AI จัดหมวดเป็น: ${catLabel[category] ?? category}\n📝 ชื่อไฟล์: ${proposed}\nถูกต้องไหม? กดเพื่อบันทึก:`,
+          text: `📄 AI จัดหมวดเป็น: ${catLabel[category] ?? category}${recvLine}\n📝 ชื่อไฟล์: ${proposed}\nถูกต้องไหม? กดเพื่อบันทึก:`,
           quickReply: { items: quickReplyItems },
         },
       ],
