@@ -609,7 +609,7 @@ async function driveResumableUpload(accessToken, folderId, filename, mimeType, f
 // Find the matching row in AccountPayable by RECV number (col B) and update
 // the correct hyperlink cell. For recv-pos also writes branch (C) and dealer (D).
 // ---------------------------------------------------------------------------
-async function updateSheetLink(recvNo, category, fileId, billNo, branch, dealer, amount) {
+async function updateSheetLink(recvNo, category, fileId, billNo, branch, dealer, amount, date) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
   const tabName = process.env.GOOGLE_SHEET_TAB;
   const driveUrl = `https://drive.google.com/file/d/${fileId}/view`;
@@ -640,6 +640,7 @@ async function updateSheetLink(recvNo, category, fileId, billNo, branch, dealer,
     // Row found — batch update hyperlink cell + branch/dealer for recv-pos
     const rowNum = rowIndex + 1;
     const data = [{ range: `${tabName}!${linkCol}${rowNum}`, values: [[formula]] }];
+    if (category === 'recv-pos' && date) data.push({ range: `${tabName}!A${rowNum}`, values: [[date]] }); // A: date — only for recv-pos
     if (category === 'recv-pos') {
       data.push({ range: `${tabName}!C${rowNum}`, values: [[branch || '']] });
       data.push({ range: `${tabName}!D${rowNum}`, values: [[dealer || '']] });
@@ -661,6 +662,7 @@ async function updateSheetLink(recvNo, category, fileId, billNo, branch, dealer,
   } else {
     // Row not found — append new row (A/F left blank for manual entry)
     const newRow = Array(12).fill('');
+    if (category === 'recv-pos') newRow[0] = date || ''; // A: date only for recv-pos
     if (category === 'recv-pos') {
       newRow[1] = formula;       // B: hyperlink
       newRow[2] = branch || '';  // C: branch code
