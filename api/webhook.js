@@ -647,8 +647,8 @@ async function updateSheetLink(recvNo, category, fileId, billNo, branch, dealer,
   const searchJson = await searchResp.json();
   const rows = searchJson.values || [];
 
-  // Normalize: "RECV 988", "988", "RECV988" all match the same row
-  const normalize = s => String(s).replace(/\s+/g, '').toLowerCase();
+  // Normalize: "RECV 988", "RECV988", "988" all match the same row
+  const normalize = s => String(s).replace(/\s+/g, '').replace(/^(recv|pos)/i, '').toLowerCase();
   const normalizedRecv = normalize(recvNo);
   const rowIndex = rows.findIndex(r => normalize(r[0] || '') === normalizedRecv);
 
