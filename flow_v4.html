@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto-Sorter Flow — v4</title>
+  <style>
+    :root {
+      --c1: #F5C842;
+      --c2: #56C87D;
+      --c3: #4DBFCE;
+      --c4: #9B59B6;
+      --c5: #E74C3C;
+      --bg: #181b2c;
+      --card: rgba(255,255,255,0.04);
+      --sub: #7f8a9e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 56px 32px 64px;
+    }
+
+    /* ── Title ── */
+    .title {
+      font-size: 2.1rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+    .title em { color: var(--c1); font-style: normal; }
+    .sub-title {
+      font-size: 0.82rem;
+      color: var(--sub);
+      text-align: center;
+      margin-bottom: 64px;
+      letter-spacing: 0.3px;
+    }
+
+    /* ── Flow wrapper ── */
+    .flow-wrap {
+      position: relative;
+      width: 900px;
+      max-width: 100%;
+      height: 340px;
+    }
+
+    /* ── SVG arrows ── */
+    .arrows {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      overflow: visible;
+      pointer-events: none;
+    }
+
+    /* ── Step box ── */
+    .step {
+      position: absolute;
+      width: 148px;
+      height: 92px;
+      border-radius: 14px;
+      border: 2.5px solid var(--clr);
+      background: var(--card);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 0.92rem;
+      font-weight: 700;
+      line-height: 1.45;
+      box-shadow: 0 0 28px rgba(0,0,0,0.4);
+    }
+
+    /* Alternating heights: low=top:160, high=top:68 */
+    .s1 { --clr: var(--c1); left: 0;    top: 160px; }
+    .s2 { --clr: var(--c2); left: 188px; top: 68px;  }
+    .s3 { --clr: var(--c3); left: 376px; top: 160px; }
+    .s4 { --clr: var(--c4); left: 564px; top: 68px;  }
+    .s5 { --clr: var(--c5); left: 752px; top: 160px; }
+
+    /* ── Diamond badge ── */
+    .bdg {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      background: var(--clr);
+      transform: rotate(45deg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 5;
+    }
+    .bdg span {
+      transform: rotate(-45deg);
+      font-size: 0.6rem;
+      font-weight: 900;
+      color: #181b2c;
+    }
+
+    /* Badge anchoring per step type */
+    .s1 .bdg, .s3 .bdg, .s5 .bdg { top: -15px; right: -15px; }
+    .s2 .bdg, .s4 .bdg           { bottom: -15px; left: -15px; }
+
+    /* ── Labels ── */
+    .lbl {
+      position: absolute;
+      width: 148px;
+      font-size: 0.71rem;
+      color: var(--sub);
+      line-height: 1.5;
+      text-align: center;
+      left: 0;
+    }
+    .lbl.above { bottom: calc(100% + 14px); }
+    .lbl.below { top:    calc(100% + 14px); }
+
+    /* ── Category note cards ── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      width: 900px;
+      max-width: 100%;
+      margin-top: 40px;
+    }
+    .card {
+      background: var(--card);
+      border-left: 3px solid var(--clr);
+      border-radius: 10px;
+      padding: 16px 18px;
+    }
+    .card h4 {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--clr);
+      margin-bottom: 6px;
+      letter-spacing: 0.2px;
+    }
+    .card p {
+      font-size: 0.72rem;
+      color: var(--sub);
+      line-height: 1.55;
+    }
+    .card code {
+      background: rgba(255,255,255,0.08);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 0.69rem;
+      color: var(--clr);
+      font-family: 'Consolas', monospace;
+    }
+
+    /* ── Footer note ── */
+    .footer-note {
+      margin-top: 20px;
+      font-size: 0.7rem;
+      color: var(--sub);
+      text-align: center;
+      line-height: 1.6;
+    }
+    .footer-note strong { color: #fff; }
+  </style>
+</head>
+<body>
+
+  <div class="title">Auto-Sorter <em>Flow</em> Infographics</div>
+  <p class="sub-title">vercel-file-sorter v4 — LINE Bot → Google Drive → Google Sheets (AccountPayable tab)</p>
+
+  <div class="flow-wrap">
+
+    <!-- ── SVG Arrows ── -->
+    <svg class="arrows" viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="m-g" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0,0 L7,3.5 L0,7 Z" fill="#56C87D"/>
+        </marker>
+        <marker id="m-c" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0,0 L7,3.5 L0,7 Z" fill="#4DBFCE"/>
+        </marker>
+        <marker id="m-p" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0,0 L7,3.5 L0,7 Z" fill="#9B59B6"/>
+        </marker>
+        <marker id="m-r" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0,0 L7,3.5 L0,7 Z" fill="#E74C3C"/>
+        </marker>
+      </defs>
+
+      <!-- s1→s2: low(206) → high(114), up -->
+      <path d="M148,206 C170,206 170,114 188,114"
+            stroke="#56C87D" stroke-width="2.5" fill="none" marker-end="url(#m-g)"/>
+
+      <!-- s2→s3: high(114) → low(206), down -->
+      <path d="M336,114 C358,114 358,206 376,206"
+            stroke="#4DBFCE" stroke-width="2.5" fill="none" marker-end="url(#m-c)"/>
+
+      <!-- s3→s4: low(206) → high(114), up -->
+      <path d="M524,206 C546,206 546,114 564,114"
+            stroke="#9B59B6" stroke-width="2.5" fill="none" marker-end="url(#m-p)"/>
+
+      <!-- s4→s5: high(114) → low(206), down -->
+      <path d="M712,114 C734,114 734,206 752,206"
+            stroke="#E74C3C" stroke-width="2.5" fill="none" marker-end="url(#m-r)"/>
+    </svg>
+
+    <!-- ── Step 1 — ส่งรูป ── -->
+    <div class="step s1">
+      <div class="bdg"><span>01</span></div>
+      ส่งรูป<br>ใน LINE
+      <div class="lbl below">ส่งรูปใบเสร็จ / ใบแจ้งหนี้<br>/ ค่าขนส่ง ไปที่ LINE Bot</div>
+    </div>
+
+    <!-- ── Step 2 — AI วิเคราะห์ ── -->
+    <div class="step s2">
+      <div class="bdg"><span>02</span></div>
+      AI<br>วิเคราะห์
+      <div class="lbl above">Gemini ดึง: หมวด, สาขา (ชื่อเมือง),<br>เลขบิล, ร้าน, วันที่, ยอด</div>
+    </div>
+
+    <!-- ── Step 3 — ยืนยัน ── -->
+    <div class="step s3">
+      <div class="bdg"><span>03</span></div>
+      ยืนยัน<br>+ พิมพ์ RECV
+      <div class="lbl below">กดปุ่มยืนยันหมวด<br>แล้วพิมพ์เลข RECV/POS</div>
+    </div>
+
+    <!-- ── Step 4 — Drive Upload ── -->
+    <div class="step s4">
+      <div class="bdg"><span>04</span></div>
+      Drive<br>Upload
+      <div class="lbl above">ไฟล์ถูกบันทึกใน Google Drive<br>โฟลเดอร์ที่ตรงกับหมวดหมู่</div>
+    </div>
+
+    <!-- ── Step 5 — Sheet Update ── -->
+    <div class="step s5">
+      <div class="bdg"><span>05</span></div>
+      Sheet<br>Updated
+      <div class="lbl below">Bot หาแถวจากคอลัมน์ B<br>ใส่ลิงก์ + สาขา + ร้าน (recv-pos)</div>
+    </div>
+
+  </div>
+
+  <!-- ── Category → Cell mapping cards ── -->
+  <div class="cards">
+
+    <div class="card" style="--clr: var(--c3)">
+      <h4>Invoice → Column E</h4>
+      <p>
+        ใบแจ้งหนี้ / ใบกำกับภาษี จากซัพพลายเออร์<br>
+        เซลล์ <code>E (เลขที่บิล)</code> กลายเป็นลิงก์คลิกได้<br>
+        แสดงเลขบิล เช่น <code>INV2260101289</code>
+      </p>
+    </div>
+
+    <div class="card" style="--clr: var(--c1)">
+      <h4>POS Receipt → Column B + C + D</h4>
+      <p>
+        ใบเสร็จรับเงิน / POS Receipt ที่ร้านออกให้<br>
+        <code>B (เลขที่ POS)</code> → ลิงก์คลิก เช่น <code>RECV 988</code><br>
+        <code>C (สาขา)</code> → เช่น <code>001</code> &nbsp;
+        <code>D (ร้าน)</code> → เช่น <code>CT Music Shop</code>
+      </p>
+    </div>
+
+    <div class="card" style="--clr: var(--c2)">
+      <h4>Shipping Cost → Column H</h4>
+      <p>
+        ใบค่าขนส่ง Kerry / Flash / EMS / Nim<br>
+        เซลล์ <code>H (ค่าขนส่ง)</code> กลายเป็นลิงก์คลิกได้<br>
+        แสดงเลข RECV ของรายการนั้น
+      </p>
+    </div>
+
+  </div>
+
+  <!-- ── Footer note ── -->
+  <p class="footer-note">
+    <strong>Primary key:</strong> เลข RECV/POS ใน Column B ใช้หา row ที่ต้องอัปเดต &nbsp;|&nbsp;
+    <strong>Skip:</strong> พิมพ์ "skip" เพื่อบันทึก Drive โดยไม่ต้องอัปเดต Sheet &nbsp;|&nbsp;
+    <strong>Expense / Slip-Bank / ETC:</strong> ไม่ถามเลข RECV — บันทึก Drive อย่างเดียว
+  </p>
+
+</body>
+</html>

@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>vercel-file-sorter — Flow Explained</title>
+<style>
+:root {
+  --navy:   #0c3049;
+  --steel:  #2d5e7e;
+  --teal:   #5bbfb2;
+  --mint:   #3ef0cf;
+
+  --bg:     #0c3049;
+  --s1:     #0f3a5c;
+  --s2:     #154060;
+  --s3:     #1a4a6e;
+  --border: rgba(91,191,178,.22);
+
+  --text:   #ddf0f5;
+  --t2:     #9bc8d8;
+  --muted:  #5f8fa5;
+
+  --c-user:   #3ef0cf;
+  --c-line:   #5bbfb2;
+  --c-vercel: #4a9fc8;
+  --c-gemini: #f5c842;
+  --c-drive:  #42d4a8;
+  --c-redis:  #f5874a;
+  --c-error:  #f56a6a;
+
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --mono: 'Cascadia Code','Fira Code','Consolas',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;line-height:1.5}
+
+/* HEADER */
+header{
+  background:linear-gradient(135deg,#091e32 0%,#0c3049 60%,#0a2d47 100%);
+  padding:2rem 2.5rem 1.75rem;
+  border-bottom:1px solid var(--border);
+  position:relative;overflow:hidden;
+}
+header::after{
+  content:'';position:absolute;top:-40%;right:-4%;
+  width:400px;height:400px;
+  background:radial-gradient(circle,rgba(62,240,207,.1) 0%,transparent 65%);
+  pointer-events:none;
+}
+.h-badge{
+  display:inline-flex;align-items:center;gap:.4rem;
+  background:rgba(62,240,207,.12);border:1px solid rgba(62,240,207,.3);
+  border-radius:99px;padding:.2rem .85rem;font-size:.72rem;color:var(--mint);
+  margin-bottom:.7rem;letter-spacing:.02em;
+}
+header h1{font-size:1.75rem;font-weight:700;letter-spacing:-.025em}
+header h1 em{
+  font-style:normal;
+  background:linear-gradient(90deg,var(--teal),var(--mint));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+header p{color:var(--muted);font-size:.87rem;margin-top:.4rem}
+
+/* TABS */
+.tabs{
+  background:var(--s1);border-bottom:1px solid var(--border);
+  padding:0 2.5rem;display:flex;gap:.05rem;
+  position:sticky;top:0;z-index:100;overflow-x:auto;
+}
+.tab-btn{
+  padding:.85rem 1.25rem;background:none;border:none;
+  color:var(--muted);font-size:.84rem;font-weight:500;
+  cursor:pointer;border-bottom:2px solid transparent;
+  transition:all .15s;white-space:nowrap;
+}
+.tab-btn:hover{color:var(--t2)}
+.tab-btn.active{color:var(--mint);border-bottom-color:var(--teal)}
+
+.panel{display:none;padding:2.5rem}
+.panel.active{display:block}
+
+.sec-title{
+  font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--muted);margin-bottom:2rem;
+  display:flex;align-items:center;gap:.75rem;
+}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* ═══════════════════════════════
+   HORIZONTAL FLOW
+═══════════════════════════════ */
+.hflow-wrap{
+  display:flex;flex-direction:column;align-items:center;gap:.25rem;
+  overflow-x:auto;
+}
+
+.strip-label{
+  font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--muted);text-align:center;padding:.1rem 0;
+}
+.strip-label.bg-lbl{color:rgba(245,135,74,.8)}
+
+.hflow-row{
+  display:flex;align-items:center;gap:0;flex-shrink:0;
+}
+
+/* node */
+.hnode{
+  min-width:148px;max-width:168px;flex-shrink:0;
+  background:var(--s1);border:1.5px solid var(--border);
+  border-radius:12px;padding:.75rem .85rem;
+  display:flex;flex-direction:column;align-items:center;text-align:center;gap:.25rem;
+}
+.hnode.dashed{border-style:dashed;opacity:.75}
+.hnode .ni{font-size:1.35rem}
+.hnode h4{font-size:.74rem;font-weight:700;line-height:1.3}
+.hnode p{font-size:.63rem;color:var(--muted);line-height:1.3;margin-top:.05rem}
+
+.n-user   {border-color:var(--c-user)}    .n-user h4  {color:var(--c-user)}
+.n-line   {border-color:var(--c-line)}    .n-line h4  {color:var(--c-line)}
+.n-vercel {border-color:var(--c-vercel);background:rgba(74,159,200,.07)} .n-vercel h4{color:var(--c-vercel)}
+.n-gemini {border-color:var(--c-gemini);background:rgba(245,200,66,.05)} .n-gemini h4{color:var(--c-gemini)}
+.n-drive  {border-color:var(--c-drive)}   .n-drive h4 {color:var(--c-drive)}
+.n-redis  {border-color:var(--c-redis);background:rgba(245,135,74,.06)}  .n-redis h4 {color:var(--c-redis)}
+.n-reply  {border-color:var(--c-line)}    .n-reply h4 {color:var(--c-line)}
+
+/* horizontal arrow */
+.harrow{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  flex-shrink:0;width:76px;gap:.12rem;
+}
+.hl{width:100%;height:2px;background:var(--border);position:relative}
+.hl::after{
+  content:'';position:absolute;right:-5px;top:50%;transform:translateY(-50%);
+  border-top:5px solid transparent;border-bottom:5px solid transparent;
+  border-left:7px solid var(--border);
+}
+.harrow span{font-size:.57rem;color:var(--muted);white-space:nowrap;text-align:center}
+.harrow.teal .hl{background:var(--teal)} .harrow.teal .hl::after{border-left-color:var(--teal)} .harrow.teal span{color:var(--teal)}
+.harrow.mint .hl{background:var(--mint)} .harrow.mint .hl::after{border-left-color:var(--mint)} .harrow.mint span{color:var(--mint)}
+
+/* vertical connector */
+.vconn{display:flex;flex-direction:column;align-items:center;gap:.08rem;padding:.1rem 0}
+.vl{width:2px;height:26px;background:var(--border);position:relative}
+.vl::after{
+  content:'';position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);
+  border-left:5px solid transparent;border-right:5px solid transparent;
+  border-top:6px solid var(--border);
+}
+.vlbl{
+  font-size:.58rem;color:var(--muted);
+  background:var(--s2);padding:.08rem .38rem;
+  border-radius:99px;border:1px solid var(--border);white-space:nowrap;
+}
+.vconn.bg .vl{background:rgba(245,135,74,.5)} .vconn.bg .vl::after{border-top-color:rgba(245,135,74,.5)}
+.vconn.bg .vlbl{border-color:rgba(245,135,74,.3);color:rgba(245,135,74,.9)}
+.vconn.ok .vl{background:var(--c-drive)} .vconn.ok .vl::after{border-top-color:var(--c-drive)}
+.vconn.ok .vlbl{border-color:rgba(66,212,168,.35);color:var(--c-drive)}
+
+/* background phase wrapper */
+.bg-phase-wrap{
+  border:1.5px dashed rgba(245,135,74,.35);
+  background:rgba(245,135,74,.04);
+  border-radius:14px;padding:.75rem 1rem;
+  display:flex;flex-direction:column;align-items:center;gap:.25rem;
+}
+.bg-phase-lbl{
+  font-size:.61rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:rgba(245,135,74,.85);margin-bottom:.05rem;
+}
+
+/* choice node */
+.choice-hnode{
+  background:rgba(91,191,178,.07);border:1.5px dashed var(--teal);
+  border-radius:12px;padding:.7rem 1.1rem;text-align:center;min-width:220px;
+}
+.choice-hnode h4{font-size:.82rem;font-weight:700;color:var(--teal);margin-bottom:.25rem}
+.choice-hnode p{font-size:.67rem;color:var(--muted);line-height:1.4}
+.qr-buttons{display:flex;flex-wrap:wrap;gap:.28rem;margin-top:.4rem;justify-content:center}
+.qr-btn{
+  font-size:.62rem;padding:.17rem .52rem;border-radius:99px;font-weight:600;
+  border:1px solid rgba(91,191,178,.35);color:var(--teal);background:rgba(91,191,178,.08);
+}
+.qr-btn.sel{border-color:rgba(62,240,207,.5);color:var(--mint);background:rgba(62,240,207,.1)}
+.qr-btn.edit{border-color:rgba(245,135,74,.4);color:var(--c-redis);background:rgba(245,135,74,.08)}
+.qr-btn.cancel{border-color:rgba(245,106,106,.35);color:var(--c-error);background:rgba(245,106,106,.07)}
+
+/* edit branch */
+.edit-branch{
+  border:1.5px dashed rgba(245,135,74,.35);background:rgba(245,135,74,.04);
+  border-radius:14px;padding:.7rem 1.1rem;
+  display:flex;align-items:flex-start;gap:.75rem;min-width:300px;max-width:480px;
+}
+.edit-branch .ni{font-size:1.15rem;flex-shrink:0;margin-top:.1rem}
+.edit-branch h5{font-size:.77rem;font-weight:700;color:var(--c-redis);margin-bottom:.22rem}
+.edit-branch p{font-size:.67rem;color:var(--muted);line-height:1.45}
+
+/* error node */
+.err-hnode{
+  background:rgba(245,106,106,.06);border:1px solid rgba(245,106,106,.25);
+  border-radius:10px;padding:.55rem .9rem;text-align:center;max-width:360px;
+  font-size:.71rem;color:var(--c-error);line-height:1.45;
+}
+
+/* legend */
+.legend{
+  display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center;
+  margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border);
+}
+.leg-item{display:flex;align-items:center;gap:.4rem;font-size:.71rem;color:var(--muted)}
+.leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.leg-dash{width:18px;height:2px;border-top:2px dashed;flex-shrink:0}
+
+/* ═══════════════════════════════
+   TOOLS
+═══════════════════════════════ */
+.tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem}
+.tool-card{background:var(--s1);border:1.5px solid var(--border);border-radius:16px;overflow:hidden;transition:box-shadow .2s}
+.tool-card:hover{box-shadow:0 4px 28px rgba(0,0,0,.4)}
+.tc-head{padding:1.1rem 1.25rem;display:flex;align-items:center;gap:.8rem;cursor:pointer}
+.tc-head:hover{background:var(--s2)}
+.tc-icon{font-size:1.65rem;flex-shrink:0}
+.tc-title h3{font-size:.95rem;font-weight:700}
+.tc-title p{font-size:.71rem;color:var(--muted);margin-top:.08rem}
+.tc-tog{margin-left:auto;background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:.2rem .55rem;font-size:.68rem;color:var(--muted);cursor:pointer;transition:all .15s}
+.tc-tog:hover{color:var(--mint);border-color:var(--teal)}
+.tc-body{padding:0 1.25rem 1.25rem;display:none}
+.tc-body.open{display:block}
+.tc-sec{margin-top:.9rem}
+.tc-sec h4{font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.45rem}
+.tc-sec p{font-size:.8rem;color:var(--t2);line-height:1.6}
+.why-box{border-radius:10px;padding:.7rem .9rem;margin-top:.5rem;border-left:3px solid}
+.why-do {background:rgba(66,212,168,.06);border-color:var(--c-drive)}
+.why-not{background:rgba(245,106,106,.06);border-color:var(--c-error)}
+.why-box h5{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.3rem}
+.why-do h5{color:var(--c-drive)} .why-not h5{color:var(--c-error)}
+.why-box p{font-size:.78rem;color:var(--t2);line-height:1.55}
+.pill-row{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.5rem}
+.pill{font-size:.68rem;padding:.2rem .6rem;border-radius:99px;border:1px solid var(--border);color:var(--muted);background:var(--s2)}
+.pc{border-color:rgba(91,191,178,.4);color:var(--teal);background:rgba(91,191,178,.07)}
+.pg{border-color:rgba(66,212,168,.4);color:var(--c-drive);background:rgba(66,212,168,.07)}
+.py{border-color:rgba(245,200,66,.4);color:var(--c-gemini);background:rgba(245,200,66,.07)}
+.pp{border-color:rgba(74,159,200,.4);color:var(--c-vercel);background:rgba(74,159,200,.07)}
+.po{border-color:rgba(245,135,74,.4);color:var(--c-redis);background:rgba(245,135,74,.07)}
+.ps{border-color:rgba(62,240,207,.4);color:var(--mint);background:rgba(62,240,207,.07)}
+.pr{border-color:rgba(245,106,106,.4);color:var(--c-error);background:rgba(245,106,106,.07)}
+.cb{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:.75rem .9rem;font-family:var(--mono);font-size:.7rem;color:var(--t2);line-height:1.7;white-space:pre-wrap;margin-top:.35rem}
+
+/* ═══════════════════════════════
+   DESIGN TAB
+═══════════════════════════════ */
+.constraint-box{background:rgba(245,135,74,.06);border:1.5px solid rgba(245,135,74,.3);border-radius:14px;padding:1.25rem 1.5rem;margin-bottom:2rem;max-width:760px}
+.constraint-box h2{font-size:1rem;font-weight:700;color:var(--c-redis);margin-bottom:.5rem}
+.constraint-box p{font-size:.85rem;color:var(--t2);line-height:1.65}
+.constraint-box strong{color:var(--text)}
+.timeline{max-width:720px;display:flex;flex-direction:column;gap:0}
+.tl-row{display:grid;grid-template-columns:80px 2px 1fr;gap:0 1rem;align-items:stretch}
+.tl-time{text-align:right;font-size:.7rem;font-weight:700;padding-top:.85rem;color:var(--muted);font-family:var(--mono)}
+.tl-line-wrap{display:flex;flex-direction:column;align-items:center}
+.tl-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;border:2px solid;margin-top:.82rem}
+.tl-vline{flex:1;width:2px;background:var(--border)}
+.tl-content{padding:.7rem 0 1rem}
+.tl-content h4{font-size:.85rem;font-weight:700;margin-bottom:.2rem}
+.tl-content p{font-size:.78rem;color:var(--muted);line-height:1.5}
+.tl-chip{display:inline-block;font-size:.65rem;padding:.15rem .5rem;border-radius:99px;font-weight:700;margin-top:.3rem}
+.tl-divider{display:flex;align-items:center;gap:.6rem;margin:.5rem 0;font-size:.64rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);max-width:720px}
+.tl-divider::before,.tl-divider::after{content:'';flex:1;height:1px;background:var(--border)}
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;max-width:720px;margin-top:2rem}
+.cmp-card{border-radius:12px;padding:1rem 1.1rem;border:1.5px solid}
+.cmp-bad{background:rgba(245,106,106,.05);border-color:rgba(245,106,106,.3)}
+.cmp-good{background:rgba(66,212,168,.05);border-color:rgba(66,212,168,.3)}
+.cmp-card h4{font-size:.82rem;font-weight:700;margin-bottom:.5rem}
+.cmp-bad h4{color:var(--c-error)} .cmp-good h4{color:var(--c-drive)}
+.cmp-card p{font-size:.78rem;color:var(--t2);line-height:1.55}
+.cmp-card .cb{font-size:.67rem;margin-top:.5rem}
+
+/* ENV TABLE */
+.env-table{width:100%;max-width:700px;border-collapse:collapse;font-size:.8rem;margin-top:1rem}
+.env-table th{text-align:left;font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:.5rem .75rem;border-bottom:1px solid var(--border)}
+.env-table td{padding:.55rem .75rem;border-bottom:1px solid var(--s3);color:var(--t2);line-height:1.45}
+.env-table tr:last-child td{border-bottom:none}
+.env-table td:first-child{font-family:var(--mono);font-size:.73rem;color:var(--mint)}
+.env-table .src{font-size:.69rem;color:var(--muted)}
+.env-table tr.new td{background:rgba(62,240,207,.04)}
+.env-table tr.new td:first-child{color:var(--teal)}
+
+@media(max-width:640px){
+  .tabs{padding:0 1rem}.panel{padding:1.5rem 1rem}header{padding:1.5rem 1rem}
+  .compare-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="h-badge">🎵 PolMusic Lampang — Receipt Automation · v3 — auto-rename + edit dealer</div>
+  <h1>vercel-file-sorter — <em>Flow Explained</em></h1>
+  <p>LINE → Vercel → Gemini → Confirm + Edit → Google Drive · Auto-renames files to dealer_date_amount฿</p>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="showTab('flow')">⚡ Full Flow</button>
+  <button class="tab-btn" onclick="showTab('tools')">🔧 Why Each Tool</button>
+  <button class="tab-btn" onclick="showTab('design')">🧠 Critical Design</button>
+  <button class="tab-btn" onclick="showTab('env')">🔑 Env Variables</button>
+</div>
+
+
+<!-- ══════════ TAB 1 — FULL FLOW ══════════ -->
+<div id="tab-flow" class="panel active">
+  <div class="sec-title">Full Request Flow — Horizontal Pipeline</div>
+
+  <div class="hflow-wrap">
+
+    <!-- STRIP 1: Fast path message -->
+    <div class="strip-label">Fast path — message event (&lt;50ms)</div>
+    <div class="hflow-row">
+      <div class="hnode n-user">
+        <span class="ni">👤</span>
+        <h4>You</h4>
+        <p>Send JPG or PDF in LINE chat</p>
+      </div>
+      <div class="harrow teal"><div class="hl"></div><span>sends file</span></div>
+      <div class="hnode n-line">
+        <span class="ni">💬</span>
+        <h4>LINE Platform</h4>
+        <p>Stores file · fires webhook POST</p>
+      </div>
+      <div class="harrow"><div class="hl"></div><span>POST /api/webhook</span></div>
+      <div class="hnode n-vercel">
+        <span class="ni">⚡</span>
+        <h4>Vercel Function</h4>
+        <p>Verify sig · register classifyAndConfirm()</p>
+      </div>
+      <div class="harrow mint"><div class="hl"></div><span>HTTP 200 &lt;50ms</span></div>
+      <div class="hnode n-line dashed">
+        <span class="ni">✅</span>
+        <h4>LINE satisfied</h4>
+        <p>Won't retry</p>
+      </div>
+    </div>
+
+    <div class="vconn bg">
+      <div class="vl"></div>
+      <div class="vlbl">waitUntil() — background</div>
+    </div>
+
+    <!-- STRIP 2: Phase 1 classify + extract -->
+    <div class="bg-phase-wrap">
+      <div class="bg-phase-lbl">Phase 1 — Classify + Extract (dealer · date · amount)</div>
+      <div class="hflow-row">
+        <div class="hnode n-line">
+          <span class="ni">📥</span>
+          <h4>Download File</h4>
+          <p>LINE Content API · Bearer token auth</p>
+        </div>
+        <div class="harrow"><div class="hl"></div><span>file bytes</span></div>
+        <div class="hnode n-gemini">
+          <span class="ni">🤖</span>
+          <h4>Gemini 2.5 Flash</h4>
+          <p>Classify + extract dealer · date · amount → JSON</p>
+        </div>
+        <div class="harrow"><div class="hl"></div><span>build filename</span></div>
+        <div class="hnode n-reply">
+          <span class="ni">💬</span>
+          <h4>Send Confirmation</h4>
+          <p>Category + proposed filename + 6 buttons</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="vconn">
+      <div class="vl"></div>
+      <div class="vlbl">quick reply appears in chat</div>
+    </div>
+
+    <!-- User choice -->
+    <div class="choice-hnode">
+      <h4>👆 You — tap a quick reply button</h4>
+      <p>AI's guess highlighted · tap to confirm or pick a different category · or fix the dealer name</p>
+      <div class="qr-buttons">
+        <span class="qr-btn sel">✅ order</span>
+        <span class="qr-btn">invoice</span>
+        <span class="qr-btn">quotation</span>
+        <span class="qr-btn">other</span>
+        <span class="qr-btn edit">✏️ แก้ชื่อบริษัท</span>
+        <span class="qr-btn cancel">❌ ยกเลิก</span>
+      </div>
+    </div>
+
+    <!-- Edit branch (optional path) -->
+    <div class="vconn" style="opacity:.5">
+      <div class="vl" style="background:rgba(245,135,74,.45);height:20px"></div>
+    </div>
+    <div class="edit-branch">
+      <span class="ni">✏️</span>
+      <div>
+        <h5>Edit dealer name branch — if user taps ✏️ แก้ชื่อบริษัท</h5>
+        <p>Pending state saved to <strong>Upstash Redis</strong> (TTL 5 min, key = edit:userId) · Bot asks: "พิมพ์ชื่อบริษัท/ลูกค้าที่ถูกต้อง:" · User types correction → Redis cleared → updated filename shown → [✅ บันทึก] [❌ ยกเลิก]</p>
+      </div>
+    </div>
+
+    <div class="vconn">
+      <div class="vl"></div>
+      <div class="vlbl">postback event fires</div>
+    </div>
+
+    <!-- STRIP 3: Fast path postback -->
+    <div class="strip-label">Fast path — postback event (&lt;50ms)</div>
+    <div class="hflow-row">
+      <div class="hnode n-line">
+        <span class="ni">💬</span>
+        <h4>LINE — postback</h4>
+        <p>Fires postback: category · dealer · date · amount</p>
+      </div>
+      <div class="harrow"><div class="hl"></div><span>POST /api/webhook</span></div>
+      <div class="hnode n-vercel">
+        <span class="ni">⚡</span>
+        <h4>Vercel Function</h4>
+        <p>Verify sig · register handlePostback()</p>
+      </div>
+      <div class="harrow mint"><div class="hl"></div><span>HTTP 200 &lt;50ms</span></div>
+      <div class="hnode n-line dashed">
+        <span class="ni">✅</span>
+        <h4>LINE satisfied</h4>
+        <p>Won't retry</p>
+      </div>
+    </div>
+
+    <div class="vconn bg">
+      <div class="vl"></div>
+      <div class="vlbl">waitUntil() — background</div>
+    </div>
+
+    <!-- STRIP 4: Phase 2 save -->
+    <div class="bg-phase-wrap">
+      <div class="bg-phase-lbl">Phase 2 — Build Filename + Save to Drive</div>
+      <div class="hflow-row">
+        <div class="hnode n-line">
+          <span class="ni">📥</span>
+          <h4>Re-download File</h4>
+          <p>By message ID · LINE keeps files for days</p>
+        </div>
+        <div class="harrow"><div class="hl"></div><span>dealer_date_amt฿.ext</span></div>
+        <div class="hnode n-drive">
+          <span class="ni">☁️</span>
+          <h4>Upload to Drive</h4>
+          <p>Correct folder · resumable upload · OAuth2 token refresh</p>
+        </div>
+        <div class="harrow"><div class="hl"></div><span>✅ saved</span></div>
+        <div class="hnode n-reply">
+          <span class="ni">💬</span>
+          <h4>Send Confirmation</h4>
+          <p>✅ บันทึกแล้ว: order → โอเอซิส_29.04.69_547฿.pdf</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error fallback -->
+    <div class="vconn" style="opacity:.35">
+      <div class="vl" style="height:16px"></div>
+    </div>
+    <div class="err-hnode">
+      ❌ Any step fails → <strong>push message</strong> (replyToken may be expired) · <code>❌ เกิดข้อผิดพลาด กรุณาลองใหม่</code>
+    </div>
+
+    <div class="vconn ok">
+      <div class="vl"></div>
+      <div class="vlbl">confirmation arrives in LINE chat</div>
+    </div>
+
+    <!-- Final node -->
+    <div class="hnode n-user" style="min-width:200px">
+      <span class="ni">👤</span>
+      <h4>You — see result</h4>
+      <p>File saved · named correctly · done</p>
+    </div>
+
+  </div><!-- /hflow-wrap -->
+
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:var(--mint)"></div>Fast path — must complete in &lt;1s</div>
+    <div class="leg-item"><div class="leg-dash" style="border-color:rgba(245,135,74,.7)"></div>Background via waitUntil() — up to 300s</div>
+    <div class="leg-item"><div class="leg-dot" style="background:transparent;border:2px dashed var(--teal)"></div>User interaction (tap quick reply)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--c-drive)"></div>Happy path result</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--c-error)"></div>Error fallback (push message)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--c-redis)"></div>Redis edit branch (optional)</div>
+  </div>
+</div>
+
+
+<!-- ══════════ TAB 2 — WHY EACH TOOL ══════════ -->
+<div id="tab-tools" class="panel">
+  <div class="sec-title">Why Each Tool Was Chosen</div>
+  <div class="tools-grid">
+
+    <div class="tool-card" style="border-top:3px solid var(--c-line)" id="tc-line">
+      <div class="tc-head" onclick="toggleTool('line')">
+        <span class="tc-icon">💬</span>
+        <div class="tc-title"><h3>LINE Messaging API</h3><p>User interface + file delivery + quick reply buttons</p></div>
+        <button class="tc-tog" id="tog-line">Collapse ▴</button>
+      </div>
+      <div class="tc-body open" id="body-line">
+        <div class="tc-sec"><h4>Why LINE</h4><p>The business already uses LINE daily. Staff send receipts as chat photos — no behavior change needed. The bot fits into existing workflow.</p></div>
+        <div class="tc-sec"><h4>What LINE provides</h4>
+          <div class="pill-row"><span class="pill pc">Webhook events (message)</span><span class="pill pc">Webhook events (postback)</span><span class="pill pc">File hosting (Content API)</span><span class="pill pc">Reply API</span><span class="pill pc">Push API</span><span class="pill pc">Quick reply buttons</span><span class="pill pc">Signature verification</span></div>
+        </div>
+        <div class="tc-sec"><h4>Quick reply — postback actions</h4>
+          <div class="why-box why-do"><h5>How they work</h5><p>Quick reply buttons fire a new <code>postback</code> webhook event with a custom <code>data</code> payload (up to 300 chars). Category, dealer, date, amount all travel inside this payload — no external state needed for the save step.</p></div>
+        </div>
+        <div class="tc-sec"><h4>The 1-second rule</h4>
+          <div class="why-box why-not"><h5>Constraint</h5><p>LINE requires HTTP 200 within <strong>1 second</strong> for both message and postback events. The entire architecture is built around meeting this deadline.</p></div>
+        </div>
+        <div class="tc-sec"><h4>Key env vars</h4><div class="pill-row"><span class="pill pc">LINE_CHANNEL_TOKEN</span><span class="pill pc">LINE_CHANNEL_SECRET</span></div></div>
+      </div>
+    </div>
+
+    <div class="tool-card" style="border-top:3px solid var(--c-vercel)" id="tc-vercel">
+      <div class="tc-head" onclick="toggleTool('vercel')">
+        <span class="tc-icon">▲</span>
+        <div class="tc-title"><h3>Vercel — Serverless Function</h3><p>HTTPS webhook host + background runner</p></div>
+        <button class="tc-tog" id="tog-vercel">Collapse ▴</button>
+      </div>
+      <div class="tc-body open" id="body-vercel">
+        <div class="tc-sec"><h4>Why Vercel</h4><p>LINE needs a public HTTPS URL. Vercel gives one instantly with zero server management. Deploy from CLI, no GitHub required, free on Hobby plan.</p></div>
+        <div class="tc-sec"><h4>The critical feature: waitUntil()</h4>
+          <div class="why-box why-do"><h5>How it works</h5><p><code>waitUntil(promise)</code> from <code>@vercel/functions</code> returns HTTP 200 immediately, then keeps the function alive for background work. Both the classify phase and the save phase use this.</p></div>
+        </div>
+        <div class="tc-sec"><h4>Hobby plan limits</h4>
+          <div class="pill-row"><span class="pill pp">300s max duration</span><span class="pill pp">2 GB memory</span><span class="pill pp">1M invocations/month</span><span class="pill pp">Free</span></div>
+        </div>
+        <div class="tc-sec"><h4>Export style required</h4>
+          <div class="cb">// ✅ Required for waitUntil() to work
+export default {
+  async fetch(request) {
+    waitUntil(classifyAndConfirm(event));
+    return new Response('OK', { status: 200 });
+  }
+};
+
+// ❌ Legacy style — waitUntil() silently ignored
+module.exports = (req, res) => { res.end('OK'); }</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tool-card" style="border-top:3px solid var(--c-gemini)" id="tc-gemini">
+      <div class="tc-head" onclick="toggleTool('gemini')">
+        <span class="tc-icon">🤖</span>
+        <div class="tc-title"><h3>Gemini 2.5 Flash</h3><p>Thai document classifier + data extractor</p></div>
+        <button class="tc-tog" id="tog-gemini">Collapse ▴</button>
+      </div>
+      <div class="tc-body open" id="body-gemini">
+        <div class="tc-sec"><h4>Why Gemini</h4><p>Files are images or PDFs — you can't classify them with keyword matching. Gemini is multimodal: it reads actual visual content and understands Thai text.</p></div>
+        <div class="tc-sec"><h4>v3 — extracts 4 fields in one call</h4>
+          <div class="why-box why-do"><h5>Single prompt, structured JSON</h5><p>Instead of just returning a category, Gemini now returns <code>{"category","dealer","date","amount"}</code> — all four fields in one API call. The filename is built from these fields before the confirmation message is sent.</p></div>
+          <div class="cb">// Example Gemini response:
+{"category":"order","dealer":"โอเอซิส","date":"29.04.69","amount":"547"}
+
+// Filename built from these:
+โอเอซิส_29.04.69_547฿.pdf</div>
+        </div>
+        <div class="tc-sec"><h4>Thai document rules in prompt</h4>
+          <div class="cb">invoice   → ใบแจ้งหนี้ (standalone bill, no delivery)
+quotation → ใบเสนอราคา (price proposal before sale)
+order     → ใบสั่งซื้อ, ใบส่งของ, combined ใบส่งของ/Tax Invoice
+            IMPORTANT: ใบส่งของ anywhere = "order"
+other     → anything else</div>
+        </div>
+        <div class="tc-sec"><h4>Key env var</h4><div class="pill-row"><span class="pill py">GEMINI_API_KEY</span></div></div>
+      </div>
+    </div>
+
+    <div class="tool-card" style="border-top:3px solid var(--c-redis)" id="tc-redis">
+      <div class="tc-head" onclick="toggleTool('redis')">
+        <span class="tc-icon">🗄️</span>
+        <div class="tc-title"><h3>Upstash Redis</h3><p>State storage for the dealer-name edit flow</p></div>
+        <button class="tc-tog" id="tog-redis">Collapse ▴</button>
+      </div>
+      <div class="tc-body open" id="body-redis">
+        <div class="tc-sec"><h4>Why Redis</h4><p>The edit flow spans two webhook events (postback tap + text reply). Vercel functions are stateless — there's nowhere to hold "pending edit" between events. Redis bridges the gap.</p></div>
+        <div class="tc-sec"><h4>Why Upstash (not self-hosted)</h4>
+          <div class="why-box why-do"><h5>Free tier + REST API</h5><p>10,000 commands/day free. More importantly, Upstash exposes a REST API — so the function uses plain <code>fetch()</code> with no SDK, no npm package, zero added bundle size.</p></div>
+        </div>
+        <div class="tc-sec"><h4>What's stored (TTL 5 min)</h4>
+          <div class="cb">// Key: edit:{userId}
+// Value:
+{
+  "messageId": "12345678901234",
+  "category": "order",
+  "date": "29.04.69",
+  "amount": "547",
+  "mimeType": "application/pdf"
+}</div>
+        </div>
+        <div class="tc-sec"><h4>Design note</h4><p>One pending edit per user at a time (userId key). If a second file is sent before the edit completes, the new state overwrites the old one. Intentional — single-user shop bot.</p></div>
+        <div class="tc-sec"><h4>Key env vars</h4><div class="pill-row"><span class="pill po">UPSTASH_REDIS_REST_URL</span><span class="pill po">UPSTASH_REDIS_REST_TOKEN</span></div></div>
+      </div>
+    </div>
+
+    <div class="tool-card" style="border-top:3px solid var(--c-drive)" id="tc-drive">
+      <div class="tc-head" onclick="toggleTool('drive')">
+        <span class="tc-icon">☁️</span>
+        <div class="tc-title"><h3>Google Drive API</h3><p>Final storage destination</p></div>
+        <button class="tc-tog" id="tog-drive">Collapse ▴</button>
+      </div>
+      <div class="tc-body open" id="body-drive">
+        <div class="tc-sec"><h4>Why Drive</h4><p>The business already uses Drive. Files land where staff already look — no new system to learn.</p></div>
+        <div class="tc-sec"><h4>Why OAuth2 refresh token (not Service Account)</h4>
+          <div class="why-box why-not"><h5>Service Account was blocked</h5><p>Google's org policy <code>iam.disableServiceAccountKeyCreation</code> blocked key creation on all available GCP projects.</p></div>
+          <div class="why-box why-do" style="margin-top:.5rem"><h5>OAuth2 refresh token — the fix</h5><p>Authenticates as your own Google account. The refresh token never expires unless revoked. Three env vars replace the entire service account JSON file.</p></div>
+        </div>
+        <div class="tc-sec"><h4>Folder routing</h4>
+          <div class="pill-row"><span class="pill pg">invoice → FOLDER_INVOICE</span><span class="pill pg">quotation → FOLDER_QUOTATION</span><span class="pill pg">order → FOLDER_ORDER</span><span class="pill pg">other → FOLDER_OTHER</span></div>
+        </div>
+        <div class="tc-sec"><h4>Key env vars</h4><div class="pill-row"><span class="pill pg">GOOGLE_CLIENT_ID</span><span class="pill pg">GOOGLE_CLIENT_SECRET</span><span class="pill pg">GOOGLE_REFRESH_TOKEN</span></div></div>
+      </div>
+    </div>
+
+    <div class="tool-card" style="border-top:3px solid var(--c-error)" id="tc-sig">
+      <div class="tc-head" onclick="toggleTool('sig')">
+        <span class="tc-icon">🔒</span>
+        <div class="tc-title"><h3>LINE Signature Verification</h3><p>Security gate — first thing checked on every request</p></div>
+        <button class="tc-tog" id="tog-sig">Collapse ▴</button>
+      </div>
+      <div class="tc-body open" id="body-sig">
+        <div class="tc-sec"><h4>Why it matters</h4><p>Your webhook URL is public — anyone can POST to it. Without signature verification, forged postback events could trigger Drive uploads.</p></div>
+        <div class="tc-sec"><h4>How it works</h4>
+          <div class="cb">// LINE signs every request:
+// x-line-signature = base64(HMAC-SHA256(rawBody, channelSecret))
+
+// Function re-computes and compares:
+if (computed !== x-line-signature) → return 403</div>
+        </div>
+        <div class="tc-sec"><h4>Why Web Crypto API (not Node crypto)</h4>
+          <div class="why-box why-do"><h5>No extra dependency</h5><p><code>crypto.subtle</code> is built into the Vercel runtime. Zero bundle cost.</p></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ══════════ TAB 3 — CRITICAL DESIGN ══════════ -->
+<div id="tab-design" class="panel">
+  <div class="sec-title">The Critical Design Decision — Why the Architecture Looks This Way</div>
+
+  <div class="constraint-box">
+    <h2>⚠️ The Core Constraint: LINE's 1-Second Timeout</h2>
+    <p>LINE requires HTTP 200 within <strong>1 second</strong> — for <strong>both message and postback events</strong>. The actual work (download + classify + upload) takes 5–30 seconds. <code>waitUntil()</code> handles both fast paths so LINE never times out.</p>
+  </div>
+
+  <div class="sec-title">Timeline of a Full Request</div>
+  <div class="timeline">
+
+    <div class="tl-row">
+      <div class="tl-time">0ms</div>
+      <div class="tl-line-wrap"><div class="tl-dot" style="background:var(--c-line);border-color:var(--c-line)"></div><div class="tl-vline"></div></div>
+      <div class="tl-content"><h4 style="color:var(--c-line)">You send a file — LINE fires message webhook</h4><p>LINE sends event JSON to <code>/api/webhook</code> and starts its 1-second timer.</p></div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-time">~10ms</div>
+      <div class="tl-line-wrap"><div class="tl-dot" style="background:var(--c-vercel);border-color:var(--c-vercel)"></div><div class="tl-vline"></div></div>
+      <div class="tl-content"><h4 style="color:var(--c-vercel)">Vercel verifies signature + registers classifyAndConfirm()</h4><p>Reads raw body · computes HMAC · registers background work via <code>waitUntil()</code>.</p></div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-time">~50ms</div>
+      <div class="tl-line-wrap"><div class="tl-dot" style="background:var(--mint);border-color:var(--mint)"></div><div class="tl-vline"></div></div>
+      <div class="tl-content"><h4 style="color:var(--mint)">HTTP 200 sent — Phase 1 fast path done</h4><p>LINE receives the response. ✅ Timer stops. No retries.</p><span class="tl-chip" style="background:rgba(62,240,207,.1);color:var(--mint);border:1px solid rgba(62,240,207,.3)">LINE deadline met</span></div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-time">~2s</div>
+      <div class="tl-line-wrap"><div class="tl-dot" style="background:var(--c-line);border-color:var(--c-line)"></div><div class="tl-vline"></div></div>
+      <div class="tl-content"><h4 style="color:var(--c-line)">Download file from LINE Content API</h4><p>Background pipeline starts. Fetches image/PDF bytes.</p></div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-time">~5s</div>
+      <div class="tl-line-wrap"><div class="tl-dot" style="background:var(--c-gemini);border-color:var(--c-gemini)"></div><div class="tl-vline"></div></div>
+      <div class="tl-content"><h4 style="color:var(--c-gemini)">Gemini classifies + extracts dealer, date, amount</h4><p>Returns <code>{"category":"order","dealer":"โอเอซิส","date":"29.04.69","amount":"547"}</code></p></div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-time">~6s</div>
+      <div class="tl-line-wrap"><div class="tl-dot" style="background:var(--teal);border-color:var(--teal)"></div><div class="tl-vline"></div></div>
+      <div class="tl-content"><h4 style="color:var(--teal)">Bot sends confirmation with proposed filename</h4><p><em>"📄 AI จัดหมวดเป็น: order · 📝 ชื่อไฟล์: โอเอซิส_29.04.69_547฿.pdf"</em> + 6 buttons</p><span class="tl-chip" style="background:rgba(245,135,74,.1);color:var(--c-redis);border:1px solid rgba(245,135,74,.3)">Phase 1 complete — waiting for you</span></div>
+    </div>
+
+    <div class="tl-divider">User interaction</div>
+
+    <div class="tl-row">
+      <div class="tl-time">~10s</div>
+      <div class="tl-line-wrap"><div class="tl-dot" style="background:var(--mint);border-color:var(--mint)"></div><div class="tl-vline"></div></div>
+      <div class="tl-content"><h4 style="color:var(--mint)">You tap ✅ order</h4><p>LINE fires postback event with <code>{"action":"save","category":"order","dealer":"โอเอซิส","date":"29.04.69","amount":"547"}</code>.</p></div>
+    </div>
+
+    <div class="tl-divider">Phase 2 — postback webhook</div>
+
+    <div class="tl-row">
+      <div class="tl-time">~10.05s</div>
+      <div class="tl-line-wrap"><div class="tl-dot" style="background:var(--c-vercel);border-color:var(--c-vercel)"></div><div class="tl-vline"></div></div>
+      <div class="tl-content"><h4 style="color:var(--c-vercel)">Vercel handles postback + returns 200</h4><p>Registers <code>handlePostback()</code> · returns HTTP 200 to LINE in &lt;50ms.</p><span class="tl-chip" style="background:rgba(62,240,207,.1);color:var(--mint);border:1px solid rgba(62,240,207,.3)">LINE deadline met again</span></div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-time">~12s</div>
+      <div class="tl-line-wrap"><div class="tl-dot" style="background:var(--c-line);border-color:var(--c-line)"></div><div class="tl-vline"></div></div>
+      <div class="tl-content"><h4 style="color:var(--c-line)">Re-download file from LINE</h4><p>Uses the message ID from postback data. LINE keeps files accessible for days.</p></div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-time">~17s</div>
+      <div class="tl-line-wrap"><div class="tl-dot" style="background:var(--c-drive);border-color:var(--c-drive)"></div><div class="tl-vline"></div></div>
+      <div class="tl-content"><h4 style="color:var(--c-drive)">Upload to Google Drive — Orders folder</h4><p>Builds filename: <code>โอเอซิส_29.04.69_547฿.pdf</code> · OAuth token refresh · resumable upload.</p></div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-time">~19s</div>
+      <div class="tl-line-wrap"><div class="tl-dot" style="background:var(--mint);border-color:var(--mint)"></div><div class="tl-vline" style="background:transparent"></div></div>
+      <div class="tl-content"><h4 style="color:var(--mint)">Confirmation reply — you see the result</h4><p><code>✅ บันทึกแล้ว: order → โอเอซิส_29.04.69_547฿.pdf</code></p><span class="tl-chip" style="background:rgba(66,212,168,.1);color:var(--c-drive);border:1px solid rgba(66,212,168,.3)">pipeline complete</span></div>
+    </div>
+
+  </div>
+
+  <div class="sec-title" style="margin-top:2.5rem">Without waitUntil() — What Would Break</div>
+  <div class="compare-grid">
+    <div class="cmp-card cmp-bad">
+      <h4>❌ Process first, then respond</h4>
+      <p>Download + Gemini + send confirmation all run before returning HTTP 200. Takes 5–10 seconds.</p>
+      <div class="cb">// Response arrives at LINE after ~8s
+// LINE gave up at 1s and already retried
+// Bot classifies the same file twice
+// Two confirmation messages arrive</div>
+    </div>
+    <div class="cmp-card cmp-good">
+      <h4>✅ Respond first, process in background</h4>
+      <p>HTTP 200 returned in ~50ms for both message and postback events. All heavy work runs inside <code>waitUntil()</code>.</p>
+      <div class="cb">// Message event:
+waitUntil(classifyAndConfirm(event));
+return new Response('OK', { status: 200 }); // &lt;50ms
+
+// Postback event:
+waitUntil(handlePostback(event));
+return new Response('OK', { status: 200 }); // &lt;50ms</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════ TAB 4 — ENV VARIABLES ══════════ -->
+<div id="tab-env" class="panel">
+  <div class="sec-title">All 12 Environment Variables</div>
+
+  <table class="env-table">
+    <thead><tr><th>Variable</th><th>What it is</th><th>Where to get it</th></tr></thead>
+    <tbody>
+      <tr><td>LINE_CHANNEL_TOKEN</td><td>Long-lived token to call LINE APIs (download files, send replies)</td><td class="src">LINE Developers Console → channel → Messaging API tab → Issue token</td></tr>
+      <tr><td>LINE_CHANNEL_SECRET</td><td>Verifies webhook requests came from LINE (HMAC-SHA256 signature)</td><td class="src">LINE Developers Console → channel → Basic settings tab</td></tr>
+      <tr><td>GEMINI_API_KEY</td><td>API key to call Gemini for document classification + field extraction</td><td class="src">Google AI Studio → Get API key</td></tr>
+      <tr><td>GOOGLE_CLIENT_ID</td><td>OAuth2 app identity</td><td class="src">Google Cloud Console → APIs &amp; Services → Credentials → OAuth client ID (Web application)</td></tr>
+      <tr><td>GOOGLE_CLIENT_SECRET</td><td>OAuth2 app secret — paired with client ID</td><td class="src">Same page as CLIENT_ID</td></tr>
+      <tr><td>GOOGLE_REFRESH_TOKEN</td><td>Long-lived token for Drive access. Must match CLIENT_ID + CLIENT_SECRET.</td><td class="src">OAuth Playground → authorize drive.file scope</td></tr>
+      <tr><td>FOLDER_INVOICE</td><td>Drive folder ID for invoices (ใบแจ้งหนี้)</td><td class="src">From Drive folder URL · ✅ set</td></tr>
+      <tr><td>FOLDER_QUOTATION</td><td>Drive folder ID for quotations (ใบเสนอราคา)</td><td class="src">From Drive folder URL · ✅ set</td></tr>
+      <tr><td>FOLDER_ORDER</td><td>Drive folder ID for orders / delivery notes (ใบสั่งซื้อ / ใบส่งของ)</td><td class="src">From Drive folder URL · ✅ set</td></tr>
+      <tr><td>FOLDER_OTHER</td><td>Drive folder ID for uncategorized files</td><td class="src">From Drive folder URL · ✅ set</td></tr>
+      <tr class="new"><td>UPSTASH_REDIS_REST_URL</td><td>REST endpoint for Upstash Redis — stores pending edit state between webhook events (TTL 5 min)</td><td class="src">upstash.com → Create Database → REST API tab</td></tr>
+      <tr class="new"><td>UPSTASH_REDIS_REST_TOKEN</td><td>Bearer token for Upstash Redis REST API</td><td class="src">Same page as REST URL</td></tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top:2rem;max-width:700px">
+    <div class="sec-title">System Status</div>
+    <div style="display:flex;align-items:center;gap:.75rem;padding:.9rem 1.1rem;background:rgba(66,212,168,.07);border:1.5px solid rgba(66,212,168,.35);border-radius:12px;margin-bottom:1.25rem">
+      <span style="font-size:1.5rem">🟢</span>
+      <div>
+        <div style="font-size:.88rem;font-weight:700;color:var(--c-drive)">System is LIVE — v3</div>
+        <div style="font-size:.76rem;color:var(--muted);margin-top:.15rem">vercel-file-sorter.vercel.app · Auto-rename active · Edit dealer flow ready (add Redis env vars)</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.5rem">
+      <div style="display:flex;align-items:center;gap:.75rem;padding:.65rem .9rem;background:var(--s1);border:1px solid var(--border);border-radius:10px;font-size:.81rem"><span style="color:var(--c-drive)">✅</span><span><strong>v1</strong> — classify + save to Drive</span></div>
+      <div style="display:flex;align-items:center;gap:.75rem;padding:.65rem .9rem;background:var(--s1);border:1px solid var(--border);border-radius:10px;font-size:.81rem"><span style="color:var(--c-drive)">✅</span><span><strong>v2</strong> — confirmation quick reply before saving · improved Thai prompt</span></div>
+      <div style="display:flex;align-items:center;gap:.75rem;padding:.65rem .9rem;background:rgba(62,240,207,.05);border:1px solid rgba(62,240,207,.2);border-radius:10px;font-size:.81rem"><span style="color:var(--mint)">✅</span><span><strong>v3</strong> — Gemini extracts dealer + date + amount · auto-renames file · ✏️ แก้ชื่อบริษัท edit flow via Upstash Redis</span></div>
+      <div style="display:flex;align-items:center;gap:.75rem;padding:.65rem .9rem;background:rgba(245,135,74,.05);border:1px solid rgba(245,135,74,.2);border-radius:10px;font-size:.81rem"><span style="color:var(--c-redis)">⏳</span><span><strong>Pending</strong> — add UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN to Vercel env vars then redeploy</span></div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+function showTab(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  const map = {flow:0,tools:1,design:2,env:3};
+  document.querySelectorAll('.tab-btn')[map[id]].classList.add('active');
+}
+function toggleTool(id) {
+  const body = document.getElementById('body-' + id);
+  const tog  = document.getElementById('tog-' + id);
+  const open = body.classList.toggle('open');
+  tog.textContent = open ? 'Collapse ▴' : 'Expand ▾';
+}
+</script>
+</body>
+</html>
