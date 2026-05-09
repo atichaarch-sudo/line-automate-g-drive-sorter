@@ -262,10 +262,14 @@ async function handleTextReply(event) {
       const { fileBytes, mimeType } = await downloadByMessageId(messageId);
       const filename = customFilename || buildFilename(dealer, date, amount, mimeType);
       const { uploadedName, fileId } = await uploadToDrive(fileBytes, mimeType, filename, category);
+      const amountFromFilename = uploadedName.replace(/\.[^.]+$/, '').split('_').pop().replace('฿', '');
       if (recvNo.toLowerCase() !== 'skip') {
-        const amountFromFilename = uploadedName.replace(/\.[^.]+$/, '').split('_').pop().replace('฿', '');
-        await updateSheetLink(recvNo, category, fileId, billNo, branch, dealer, amountFromFilename).catch(e =>
+        await updateSheetLink(recvNo, category, fileId, billNo, branch, dealer, amountFromFilename, date).catch(e =>
           console.error('Sheet update error:', e)
+        );
+      } else {
+        await updateSheetLink('รอเลข', category, fileId, billNo, branch, dealer, amountFromFilename, date).catch(e =>
+          console.error('Sheet skip-append error:', e)
         );
       }
       await sendLineReply(replyToken, `✅ บันทึกแล้ว: ${category} → ${uploadedName}`);
