@@ -660,7 +660,6 @@ async function updateSheetLink(recvNo, category, fileId, billNo, branch, dealer,
     // Row found — batch update hyperlink cell + branch/dealer for recv-pos
     const rowNum = rowIndex + 1;
     const data = [{ range: `${tabName}!${linkCol}${rowNum}`, values: [[formula]] }];
-    if (category === 'recv-pos' && date) data.push({ range: `${tabName}!A${rowNum}`, values: [[date]] }); // A: date — only for recv-pos
     if (category === 'recv-pos') {
       data.push({ range: `${tabName}!C${rowNum}`, values: [[branch || '']] });
       data.push({ range: `${tabName}!D${rowNum}`, values: [[dealer || '']] });
