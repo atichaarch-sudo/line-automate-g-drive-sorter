@@ -1,0 +1,9 @@
+{
+  "name": "vercel-file-sorter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@vercel/functions": "^1.0.0"
+  }
+}
