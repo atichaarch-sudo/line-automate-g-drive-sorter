@@ -82,7 +82,7 @@ async function classifyAndConfirm(event) {
     }
   } catch (err) {
     console.error('classifyAndConfirm error:', err);
-    if (userId) await sendLinePush(userId, '❌ เกิดข้อผิดพลาด กรุณาลองใหม่');
+    if (userId) await sendLinePush(userId, classifyError(err));
   }
 }
 
@@ -125,7 +125,7 @@ async function handlePostback(event) {
       });
     } catch (err) {
       console.error('edit_filename error:', err);
-      if (userId) await sendLinePush(userId, '❌ เกิดข้อผิดพลาด กรุณาลองใหม่');
+      if (userId) await sendLinePush(userId, classifyError(err));
     }
     return;
   }
@@ -145,7 +145,7 @@ async function handlePostback(event) {
       await sendLineReply(replyToken, `✅ บันทึกแล้ว: recv-pos → ${uploadedName}`);
     } catch (err) {
       console.error('handlePostback recv-pos error:', err);
-      if (userId) await sendLinePush(userId, '❌ เกิดข้อผิดพลาด กรุณาลองใหม่');
+      if (userId) await sendLinePush(userId, classifyError(err));
     }
     return;
   }
@@ -156,7 +156,7 @@ async function handlePostback(event) {
       await sendLineReply(replyToken, '📋 พิมพ์เลข RECV เพื่อลิงก์ในชีท\n(หรือพิมพ์ "skip" ถ้ายังไม่มีเลข)');
     } catch (err) {
       console.error('handlePostback recv_pending error:', err);
-      if (userId) await sendLinePush(userId, '❌ เกิดข้อผิดพลาด กรุณาลองใหม่');
+      if (userId) await sendLinePush(userId, classifyError(err));
     }
     return;
   }
@@ -168,7 +168,7 @@ async function handlePostback(event) {
     await sendLineReply(replyToken, `✅ บันทึกแล้ว: ${category} → ${uploadedName}`);
   } catch (err) {
     console.error('handlePostback error:', err);
-    if (userId) await sendLinePush(userId, '❌ เกิดข้อผิดพลาด กรุณาลองใหม่');
+    if (userId) await sendLinePush(userId, classifyError(err));
   }
 }
 
@@ -275,7 +275,7 @@ async function handleTextReply(event) {
       await sendLineReply(replyToken, `✅ บันทึกแล้ว: ${category} → ${uploadedName}`);
     } catch (err) {
       console.error('handleTextReply recv_pending error:', err);
-      if (userId) await sendLinePush(userId, '❌ เกิดข้อผิดพลาด กรุณาลองใหม่');
+      if (userId) await sendLinePush(userId, classifyError(err));
     }
     return;
   }
@@ -706,6 +706,34 @@ async function updateSheetLink(recvNo, category, fileId, billNo, branch, dealer,
       throw new Error(`Sheets append failed: ${appendResp.status} — ${errText}`);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Classify an error into a user-facing Thai message based on its source
+// ---------------------------------------------------------------------------
+function classifyError(err) {
+  const msg = err?.message || '';
+  if (msg.startsWith('Gemini')) {
+    if (msg.includes('429')) return '❌ Gemini API: คำขอเกินโควต้า กรุณารอสักครู่แล้วลองใหม่';
+    if (msg.includes('503')) return '❌ Gemini API: บริการไม่พร้อมใช้งานชั่วคราว กรุณาลองใหม่';
+    return '❌ Gemini API: เกิดข้อผิดพลาด กรุณาลองใหม่';
+  }
+  if (msg.startsWith('OAuth token refresh')) {
+    return '❌ Google Authentication: token หมดอายุหรือไม่ถูกต้อง กรุณาแจ้งผู้ดูแลระบบ';
+  }
+  if (msg.startsWith('Drive')) {
+    return '❌ Google Drive: อัปโหลดไฟล์ไม่สำเร็จ กรุณาลองใหม่';
+  }
+  if (msg.startsWith('Sheets')) {
+    return '❌ Google Sheets: บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่';
+  }
+  if (msg.startsWith('Redis')) {
+    return '❌ ระบบ Cache: เกิดข้อผิดพลาด กรุณาลองใหม่';
+  }
+  if (msg.startsWith('LINE')) {
+    return '❌ LINE API: ดาวน์โหลดไฟล์ไม่สำเร็จ กรุณาลองใหม่';
+  }
+  return '❌ เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ กรุณาลองใหม่';
 }
 
 // ---------------------------------------------------------------------------
