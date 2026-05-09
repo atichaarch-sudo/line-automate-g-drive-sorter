@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design v3 — Full Sheet Writes</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f1117; color: #e2e8f0; padding: 32px 24px; min-height: 100vh;
+  }
+  h1 { font-size: 20px; font-weight: 700; color: #f8fafc; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #94a3b8; margin-bottom: 28px; }
+
+  .section { max-width: 880px; margin: 0 auto 30px; }
+  .section-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #64748b; margin-bottom: 12px;
+  }
+
+  /* Sheet table */
+  .sheet { background: #1a2332; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); }
+  .sheet-head {
+    font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase;
+    letter-spacing: 0.06em; padding: 7px 14px;
+    background: rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .sheet-grid {
+    display: grid;
+    grid-template-columns: 28px 90px 140px 65px 100px 130px 65px 50px 120px;
+    font-size: 11px;
+  }
+  .sheet-grid.hdr { background: rgba(255,255,255,0.025); }
+  .sc {
+    padding: 6px 8px; border-right: 1px solid rgba(255,255,255,0.04);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .sc:last-child { border-right: none; }
+  .sheet-grid:last-child .sc { border-bottom: none; }
+  .sc.head { color: #475569; font-weight: 700; font-size: 10px; }
+  .sc.auto  { color: #a78bfa; }   /* Gemini auto-filled */
+  .sc.link  { color: #60a5fa; }
+  .sc.pend  { color: #fb923c; font-style: italic; }
+  .sc.fill  { color: #34d399; }
+  .sc.blank { color: #1e3148; font-style: italic; }
+  .sc.norm  { color: #94a3b8; }
+
+  /* Legend */
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #64748b; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+
+  /* Write matrix */
+  .matrix { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .matrix th {
+    text-align: center; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; color: #64748b; padding: 8px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .matrix th:first-child { text-align: left; }
+  .matrix td {
+    padding: 9px 10px; text-align: center;
+    border-bottom: 1px solid rgba(255,255,255,0.05); color: #94a3b8; line-height: 1.5;
+  }
+  .matrix td:first-child { text-align: left; font-weight: 600; color: #e2e8f0; }
+  .matrix tr:last-child td { border-bottom: none; }
+  .matrix code {
+    background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px;
+    font-family: monospace; font-size: 10px; color: #a5f3fc;
+  }
+  .tick  { color: #34d399; font-weight: 700; font-size: 14px; }
+  .cross { color: #334155; }
+  .auto-v { color: #a78bfa; font-weight: 700; font-size: 13px; }
+  .ask-v  { color: #fb923c; font-weight: 700; font-size: 13px; }
+
+  /* Code box */
+  .code-box {
+    background: #1e293b; border-radius: 10px; padding: 18px 20px;
+    border: 1px solid rgba(255,255,255,0.08); font-family: 'Fira Code','Cascadia Code',monospace;
+    font-size: 12px; line-height: 1.8; overflow-x: auto; margin-bottom: 12px;
+  }
+  .code-box h3 { font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 8px; font-family: sans-serif; letter-spacing: 0.06em; text-transform: uppercase; }
+  .add  { color: #4ade80; }
+  .rem  { color: #f87171; text-decoration: line-through; opacity: 0.7; }
+  .keep { color: #64748b; }
+  .cmt  { color: #334155; }
+  .hi   { color: #94a3b8; }
+
+  .tag {
+    display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px;
+    border-radius: 999px; margin-left: 8px; vertical-align: middle;
+  }
+  .new  { background: rgba(74,222,128,0.15); color: #4ade80; }
+  .chg  { background: rgba(251,146,60,0.15);  color: #fb923c; }
+</style>
+</head>
+<body>
+
+  <h1>Final Design — Full sheet column writes per category</h1>
+  <p class="subtitle">Including the new column A (date) written by bot for every row it touches</p>
+
+  <!-- Section 1: Sheet write matrix -->
+  <div class="section">
+    <div class="section-title">1 · What the bot writes to each sheet column</div>
+    <table class="matrix">
+      <tr>
+        <th>Category / scenario</th>
+        <th>A · Date</th>
+        <th>B · เลขที่ POS</th>
+        <th>C · สาขา</th>
+        <th>D · ร้าน</th>
+        <th>E · เลขที่บิล</th>
+        <th>F · ยอด</th>
+        <th>H · ขนส่ง</th>
+      </tr>
+      <tr>
+        <td>recv-pos (row found)</td>
+        <td><span class="auto-v">●</span> date</td>
+        <td><span class="tick">🔗</span> hyperlink</td>
+        <td><span class="auto-v">●</span> branch</td>
+        <td><span class="auto-v">●</span> dealer</td>
+        <td class="cross">—</td>
+        <td class="cross">—</td>
+        <td class="cross">—</td>
+      </tr>
+      <tr>
+        <td>recv-pos (new row)</td>
+        <td><span class="auto-v">●</span> date</td>
+        <td><span class="tick">🔗</span> hyperlink</td>
+        <td><span class="auto-v">●</span> branch</td>
+        <td><span class="auto-v">●</span> dealer</td>
+        <td class="cross">—</td>
+        <td class="cross">—</td>
+        <td class="cross">—</td>
+      </tr>
+      <tr>
+        <td>invoice (row found)</td>
+        <td><span class="auto-v">●</span> date</td>
+        <td class="cross">—</td>
+        <td class="cross">—</td>
+        <td class="cross">—</td>
+        <td><span class="tick">🔗</span> hyperlink</td>
+        <td><span class="auto-v">●</span> amount</td>
+        <td class="cross">—</td>
+      </tr>
+      <tr>
+        <td>invoice (new row / skip)</td>
+        <td><span class="auto-v">●</span> date</td>
+        <td><span class="ask-v">รอเลข</span> if skip</td>
+        <td class="cross">—</td>
+        <td class="cross">—</td>
+        <td><span class="tick">🔗</span> hyperlink</td>
+        <td><span class="auto-v">●</span> amount</td>
+        <td class="cross">—</td>
+      </tr>
+      <tr>
+        <td>shipping-cost (row found)</td>
+        <td><span class="auto-v">●</span> date</td>
+        <td class="cross">—</td>
+        <td class="cross">—</td>
+        <td class="cross">—</td>
+        <td class="cross">—</td>
+        <td class="cross">—</td>
+        <td><span class="tick">🔗</span> hyperlink</td>
+      </tr>
+      <tr>
+        <td>shipping-cost (new row / skip)</td>
+        <td><span class="auto-v">●</span> date</td>
+        <td><span class="ask-v">รอเลข</span> if skip</td>
+        <td class="cross">—</td>
+        <td class="cross">—</td>
+        <td class="cross">—</td>
+        <td class="cross">—</td>
+        <td><span class="tick">🔗</span> hyperlink</td>
+      </tr>
+    </table>
+    <div class="legend" style="margin-top:12px;">
+      <div class="legend-item"><div class="legend-dot" style="background:#a78bfa;"></div> Gemini auto-fills (date, branch, dealer, amount)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#60a5fa;"></div> Hyperlink to Drive file</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#fb923c;"></div> "รอเลข" placeholder (skip only)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#1e3148;"></div> Left blank (user fills manually)</div>
+    </div>
+  </div>
+
+  <!-- Section 2: Sheet mockup -->
+  <div class="section">
+    <div class="section-title">2 · Sheet result after a mix of transactions</div>
+    <div class="sheet">
+      <div class="sheet-head">AccountPayable</div>
+      <div class="sheet-grid hdr">
+        <div class="sc head">#</div>
+        <div class="sc head">A · วันที่</div>
+        <div class="sc head">B · เลขที่ POS</div>
+        <div class="sc head">C · สาขา</div>
+        <div class="sc head">D · ร้าน</div>
+        <div class="sc head">E · เลขที่บิล</div>
+        <div class="sc head">F · ยอด</div>
+        <div class="sc head">G</div>
+        <div class="sc head">H · ขนส่ง</div>
+      </div>
+      <div class="sheet-grid">
+        <div class="sc norm">2</div>
+        <div class="sc auto">26.03.69</div>
+        <div class="sc link">🔗 RECV 988</div>
+        <div class="sc fill">001</div>
+        <div class="sc fill">CT Music</div>
+        <div class="sc blank">—</div>
+        <div class="sc blank">—</div>
+        <div class="sc blank">—</div>
+        <div class="sc blank">—</div>
+      </div>
+      <div class="sheet-grid">
+        <div class="sc norm">3</div>
+        <div class="sc auto">27.03.69</div>
+        <div class="sc norm">RECV 990</div>
+        <div class="sc blank">—</div>
+        <div class="sc blank">—</div>
+        <div class="sc link">🔗 INV-001</div>
+        <div class="sc auto">10,408</div>
+        <div class="sc blank">—</div>
+        <div class="sc blank">—</div>
+      </div>
+      <div class="sheet-grid">
+        <div class="sc norm">4</div>
+        <div class="sc auto">28.03.69</div>
+        <div class="sc pend">รอเลข</div>
+        <div class="sc blank">—</div>
+        <div class="sc blank">—</div>
+        <div class="sc link">🔗 INV-002</div>
+        <div class="sc auto">6,200</div>
+        <div class="sc blank">—</div>
+        <div class="sc blank">—</div>
+      </div>
+      <div class="sheet-grid">
+        <div class="sc norm">5</div>
+        <div class="sc auto">29.03.69</div>
+        <div class="sc pend">รอเลข</div>
+        <div class="sc blank">—</div>
+        <div class="sc blank">—</div>
+        <div class="sc blank">—</div>
+        <div class="sc blank">—</div>
+        <div class="sc blank">—</div>
+        <div class="sc link">🔗 Kerry</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:#475569;margin-top:8px;">
+      Row 2: recv-pos (auto RECV + date + branch + dealer) &nbsp;·&nbsp;
+      Row 3: invoice with RECV No. &nbsp;·&nbsp;
+      Row 4: invoice skip &nbsp;·&nbsp;
+      Row 5: shipping-cost skip
+    </div>
+  </div>
+
+  <!-- Section 3: Code change -->
+  <div class="section">
+    <div class="section-title">3 · Code change — updateSheetLink adds date parameter</div>
+
+    <div class="code-box">
+      <h3>Function signature</h3>
+<span class="rem">async function updateSheetLink(recvNo, category, fileId, billNo, branch, dealer, amount)</span>
+<span class="add">async function updateSheetLink(recvNo, category, fileId, billNo, branch, dealer, amount, date)</span>
+    </div>
+
+    <div class="code-box">
+      <h3>Found row — batch update (add col A)</h3>
+<span class="keep">    const data = [{ range: `${tabName}!${linkCol}${rowNum}`, values: [[formula]] }];</span>
+<span class="add">    if (date) data.push({ range: `${tabName}!A${rowNum}`, values: [[date]] });</span>
+<span class="keep">    if (category === 'recv-pos') { ... }</span>
+    </div>
+
+    <div class="code-box">
+      <h3>New row (append) — set newRow[0]</h3>
+<span class="add">    newRow[0] = date || '';  // A: transaction date</span>
+<span class="keep">    if (category === 'recv-pos') {</span>
+<span class="keep">      newRow[1] = formula;       // B: hyperlink</span>
+<span class="keep">      ...</span>
+<span class="keep">    }</span>
+    </div>
+
+    <div class="code-box">
+      <h3>All callers — pass date through</h3>
+<span class="cmt">// handlePostback (recv-pos auto path)</span>
+<span class="rem">    await updateSheetLink(billNo, 'recv-pos', fileId, billNo, branch, dealer, amount);</span>
+<span class="add">    await updateSheetLink(billNo, 'recv-pos', fileId, billNo, branch, dealer, amount, date);</span>
+
+<span class="cmt">// handleTextReply (invoice / shipping-cost — both normal and skip)</span>
+<span class="rem">    await updateSheetLink(recvNo, category, fileId, billNo, branch, dealer, amount);</span>
+<span class="add">    await updateSheetLink(recvNo, category, fileId, billNo, branch, dealer, amount, date);</span>
+<span class="add">    // skip path:</span>
+<span class="add">    await updateSheetLink('รอเลข', category, fileId, billNo, branch, dealer, amount, date);</span>
+    </div>
+  </div>
+
+</body>
+</html>

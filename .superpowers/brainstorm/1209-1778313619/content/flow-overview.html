@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vercel-file-sorter — End-to-End Flow</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    padding: 32px 24px;
+    min-height: 100vh;
+  }
+  h1 { font-size: 22px; font-weight: 700; color: #f8fafc; margin-bottom: 6px; }
+  .subtitle { font-size: 13px; color: #94a3b8; margin-bottom: 32px; }
+
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    max-width: 780px;
+    margin: 0 auto;
+  }
+
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px 20px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background: rgba(255,255,255,0.04);
+    position: relative;
+  }
+  .step + .step { margin-top: 4px; }
+
+  .step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .step-body { flex: 1; }
+  .step-title { font-size: 14px; font-weight: 600; color: #f1f5f9; margin-bottom: 4px; }
+  .step-detail { font-size: 12px; color: #94a3b8; line-height: 1.6; }
+  .step-detail code {
+    background: rgba(255,255,255,0.08);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 11px;
+    color: #a5f3fc;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  /* Actor colors */
+  .line   { background: rgba(74,222,128,0.15); border-color: rgba(74,222,128,0.25); }
+  .line   .step-num { background: rgba(74,222,128,0.2); color: #4ade80; }
+  .gemini { background: rgba(96,165,250,0.12); border-color: rgba(96,165,250,0.25); }
+  .gemini .step-num { background: rgba(96,165,250,0.2); color: #60a5fa; }
+  .redis  { background: rgba(251,146,60,0.12); border-color: rgba(251,146,60,0.25); }
+  .redis  .step-num { background: rgba(251,146,60,0.2); color: #fb923c; }
+  .drive  { background: rgba(167,139,250,0.12); border-color: rgba(167,139,250,0.25); }
+  .drive  .step-num { background: rgba(167,139,250,0.2); color: #a78bfa; }
+  .sheets { background: rgba(52,211,153,0.12); border-color: rgba(52,211,153,0.25); }
+  .sheets .step-num { background: rgba(52,211,153,0.2); color: #34d399; }
+
+  .tag-line   { background: rgba(74,222,128,0.2); color: #4ade80; }
+  .tag-gemini { background: rgba(96,165,250,0.2); color: #60a5fa; }
+  .tag-redis  { background: rgba(251,146,60,0.2); color: #fb923c; }
+  .tag-drive  { background: rgba(167,139,250,0.2); color: #a78bfa; }
+  .tag-sheets { background: rgba(52,211,153,0.2); color: #34d399; }
+
+  .arrow {
+    text-align: center;
+    color: #475569;
+    font-size: 18px;
+    line-height: 1;
+    padding: 2px 0;
+  }
+
+  .branch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 4px 0;
+  }
+  .branch-label {
+    grid-column: 1 / -1;
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-align: center;
+    padding: 6px 0 2px;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 28px;
+    justify-content: center;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #94a3b8;
+  }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+</style>
+</head>
+<body>
+  <h1>vercel-file-sorter — End-to-End Flow</h1>
+  <p class="subtitle">How a LINE message travels from user → Gemini → Drive → Google Sheets</p>
+
+  <div class="flow">
+
+    <!-- Step 1 -->
+    <div class="step line">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">User sends image or file to LINE bot <span class="tag tag-line">LINE</span></div>
+        <div class="step-detail">
+          Can be a camera photo, screenshot, or PDF file attachment.<br>
+          Triggers a <code>message</code> event (type = <code>image</code> or <code>file</code>).
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow">↓</div>
+
+    <!-- Step 2 -->
+    <div class="step line">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Bot downloads the file <span class="tag tag-line">LINE API</span></div>
+        <div class="step-detail">
+          Fetches raw bytes from <code>api-data.line.me/v2/bot/message/:id/content</code>.<br>
+          External images (shared links) are downloaded differently and saved immediately — no confirmation step.
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow">↓</div>
+
+    <!-- Step 3 -->
+    <div class="step gemini">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Gemini 2.5 Flash classifies and extracts fields <span class="tag tag-gemini">Gemini AI</span></div>
+        <div class="step-detail">
+          Sends the image as base64 with a Thai business document prompt.<br>
+          Returns JSON: <code>{ category, dealer, date, amount, branch, bill_no }</code><br>
+          6 categories: <code>expense</code> · <code>shipping-cost</code> · <code>invoice</code> · <code>slip-bank</code> · <code>recv-pos</code> · <code>etc</code><br>
+          Retries 3× on 429/503 errors.
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow">↓</div>
+
+    <!-- Step 4 -->
+    <div class="step line">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Bot sends confirmation quick reply <span class="tag tag-line">LINE</span></div>
+        <div class="step-detail">
+          8 buttons: 6 category options (AI's guess marked ✅) + ✏️ rename + ❌ cancel.<br>
+          Shows proposed filename: <code>Dealer_Date_Amount฿.jpg</code>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow">↓</div>
+
+    <!-- Branch point -->
+    <div class="branch">
+      <div class="branch-label">User taps a category — two paths based on category type</div>
+
+      <!-- Path A: sheet-linked -->
+      <div>
+        <div class="step redis" style="border-radius:10px 10px 0 0; margin-bottom:0;">
+          <div class="step-num" style="width:22px;height:22px;font-size:10px;">A</div>
+          <div class="step-body">
+            <div class="step-title" style="font-size:12px;">Sheet-linked category <span class="tag tag-redis">Redis</span></div>
+            <div class="step-detail"><code>invoice</code> · <code>recv-pos</code> · <code>shipping-cost</code><br>
+            Saves pending state to Redis (5 min TTL).<br>
+            Replies: <em>"พิมพ์เลข POS/RECV:"</em></div>
+          </div>
+        </div>
+        <div class="step redis" style="border-radius:0; margin-top:2px;">
+          <div class="step-num" style="width:22px;height:22px;font-size:10px;">A2</div>
+          <div class="step-body">
+            <div class="step-title" style="font-size:12px;">User types RECV number</div>
+            <div class="step-detail">e.g. <code>RECV 988</code> or <code>skip</code><br>
+            Bot reads Redis state by <code>recv_pending:userId</code>.</div>
+          </div>
+        </div>
+        <div class="step drive" style="border-radius:0; margin-top:2px;">
+          <div class="step-num" style="width:22px;height:22px;font-size:10px;">A3</div>
+          <div class="step-body">
+            <div class="step-title" style="font-size:12px;">Upload to Google Drive <span class="tag tag-drive">Drive</span></div>
+            <div class="step-detail">Re-downloads file by <code>messageId</code>.<br>
+            Resumable upload → correct folder → returns <code>fileId</code>.</div>
+          </div>
+        </div>
+        <div class="step sheets" style="border-radius:0 0 10px 10px; margin-top:2px;">
+          <div class="step-num" style="width:22px;height:22px;font-size:10px;">A4</div>
+          <div class="step-body">
+            <div class="step-title" style="font-size:12px;">Update Google Sheets <span class="tag tag-sheets">Sheets</span></div>
+            <div class="step-detail">
+              Searches col B for RECV number → finds row → writes hyperlink.<br>
+              <code>recv-pos</code>: col B + C(branch) + D(dealer)<br>
+              <code>invoice</code>: col E<br>
+              <code>shipping-cost</code>: col H<br>
+              Not found → appends new row.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Path B: non-sheet -->
+      <div>
+        <div class="step drive" style="border-radius:10px; height:100%;">
+          <div class="step-num" style="width:22px;height:22px;font-size:10px;">B</div>
+          <div class="step-body">
+            <div class="step-title" style="font-size:12px;">Non-sheet category <span class="tag tag-drive">Drive</span></div>
+            <div class="step-detail"><code>expense</code> · <code>slip-bank</code> · <code>etc</code><br><br>
+            No RECV number needed.<br>
+            Uploads directly to the matching Drive folder.<br><br>
+            No Sheets update.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow">↓</div>
+
+    <!-- Step Final -->
+    <div class="step line">
+      <div class="step-num">✓</div>
+      <div class="step-body">
+        <div class="step-title">Bot sends success message <span class="tag tag-line">LINE</span></div>
+        <div class="step-detail">
+          <code>✅ บันทึกแล้ว: {category} → {filename}</code>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#4ade80;"></div> LINE Messaging API</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#60a5fa;"></div> Gemini AI</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#fb923c;"></div> Upstash Redis</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#a78bfa;"></div> Google Drive</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#34d399;"></div> Google Sheets</div>
+  </div>
+
+</body>
+</html>

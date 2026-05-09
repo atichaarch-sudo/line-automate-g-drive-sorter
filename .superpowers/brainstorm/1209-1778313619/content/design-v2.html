@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Revised Design</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    padding: 32px 24px;
+    min-height: 100vh;
+  }
+  h1 { font-size: 20px; font-weight: 700; color: #f8fafc; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #94a3b8; margin-bottom: 28px; }
+
+  .section { max-width: 860px; margin: 0 auto 30px; }
+  .section-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #64748b; margin-bottom: 12px;
+  }
+
+  /* 3-col category comparison */
+  .cats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .cat {
+    border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);
+    padding: 16px 18px; background: rgba(255,255,255,0.03);
+  }
+  .cat-name { font-size: 14px; font-weight: 700; margin-bottom: 8px; color: #f1f5f9; }
+  .cat.auto  { border-color: rgba(167,139,250,0.4); background: rgba(167,139,250,0.06); }
+  .cat.ask   { border-color: rgba(251,146,60,0.35); background: rgba(251,146,60,0.05); }
+  .badge {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    padding: 2px 7px; border-radius: 999px; margin-bottom: 8px;
+  }
+  .badge-auto { background: rgba(167,139,250,0.25); color: #c4b5fd; }
+  .badge-ask  { background: rgba(251,146,60,0.25);  color: #fdba74; }
+
+  .step-list { list-style: none; }
+  .step-list li {
+    font-size: 12px; color: #94a3b8; line-height: 1.6;
+    padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+    display: flex; gap: 8px;
+  }
+  .step-list li:last-child { border-bottom: none; }
+  .step-list li .num {
+    flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%;
+    background: rgba(255,255,255,0.07); color: #64748b;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; margin-top: 2px;
+  }
+  .step-list code {
+    background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px;
+    font-family: monospace; font-size: 11px; color: #a5f3fc;
+  }
+  .hi { color: #f1f5f9; font-weight: 600; }
+
+  /* Flow diagram rows */
+  .flow { display: flex; flex-direction: column; gap: 0; }
+  .fstep {
+    padding: 12px 16px; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background: rgba(255,255,255,0.04); margin-bottom: 3px;
+    font-size: 13px;
+  }
+  .fstep-title { font-weight: 600; color: #f1f5f9; margin-bottom: 3px; }
+  .fstep-detail { font-size: 12px; color: #94a3b8; line-height: 1.55; }
+  .fstep-detail code {
+    background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px;
+    font-family: monospace; font-size: 11px; color: #a5f3fc;
+  }
+  .fstep.shared { border-color: rgba(96,165,250,0.2);  background: rgba(96,165,250,0.06); }
+  .fstep.auto   { border-color: rgba(167,139,250,0.3); background: rgba(167,139,250,0.07); }
+  .fstep.ask    { border-color: rgba(251,146,60,0.3);  background: rgba(251,146,60,0.06); }
+  .fstep.done   { border-color: rgba(52,211,153,0.3);  background: rgba(52,211,153,0.06); }
+  .arrow { text-align: center; color: #334155; font-size: 14px; padding: 1px 0; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .col-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; text-align: center; padding: 5px 10px;
+    border-radius: 6px; margin-bottom: 8px;
+  }
+  .label-auto { background: rgba(167,139,250,0.15); color: #c4b5fd; }
+  .label-ask  { background: rgba(251,146,60,0.15);  color: #fdba74; }
+
+  /* Code diff */
+  .code-box {
+    background: #1e293b; border-radius: 10px; padding: 18px 20px;
+    border: 1px solid rgba(255,255,255,0.08); font-family: 'Fira Code','Cascadia Code',monospace;
+    font-size: 12px; line-height: 1.8; overflow-x: auto;
+  }
+  .code-box h3 { font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 10px; font-family: sans-serif; }
+  .add  { color: #4ade80; }
+  .rem  { color: #f87171; }
+  .keep { color: #64748b; }
+  .hi-c { color: #94a3b8; }
+
+  /* Confirmation message mockup */
+  .line-msg {
+    background: #1a2332; border-radius: 10px; padding: 14px 16px;
+    border: 1px solid rgba(255,255,255,0.08); max-width: 320px;
+    font-size: 13px; color: #e2e8f0; line-height: 1.65;
+  }
+  .line-msg .label { font-size: 10px; color: #475569; margin-bottom: 8px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.06em; }
+  .line-msg .bubble {
+    background: white; color: #1e293b; border-radius: 12px 12px 12px 4px;
+    padding: 10px 14px; font-size: 13px; line-height: 1.65; margin-bottom: 8px;
+  }
+  .line-msg .recv-hi { color: #7c3aed; font-weight: 700; }
+</style>
+</head>
+<body>
+  <h1>Revised Design — recv-pos uses Gemini-extracted RECV No.</h1>
+  <p class="subtitle">recv-pos never asks the user to type a number. invoice and shipping-cost still ask (with skip → รอเลข).</p>
+
+  <!-- Section 1: Per-category rule -->
+  <div class="section">
+    <div class="section-title">1 · How each category handles RECV number</div>
+    <div class="cats">
+      <div class="cat auto">
+        <div class="badge badge-auto">Auto — Gemini extracts</div>
+        <div class="cat-name">recv-pos</div>
+        <ul class="step-list">
+          <li><div class="num">1</div><span>Gemini reads <code>bill_no</code> = เลขที่เอกสาร from the receipt</span></li>
+          <li><div class="num">2</div><span>Bot shows it in the confirmation message so user can verify</span></li>
+          <li><div class="num">3</div><span>User taps confirm → <span class="hi">immediately</span> uploads + updates sheet</span></li>
+          <li><div class="num">4</div><span>No "พิมพ์เลข RECV" step at all</span></li>
+        </ul>
+      </div>
+      <div class="cat ask">
+        <div class="badge badge-ask">Ask user → or skip</div>
+        <div class="cat-name">invoice</div>
+        <ul class="step-list">
+          <li><div class="num">1</div><span>Confirm category → bot asks "พิมพ์เลข RECV:"</span></li>
+          <li><div class="num">2</div><span>User types RECV No. → update sheet col E</span></li>
+          <li><div class="num">3</div><span>User types <code>skip</code> → append row B=<code>รอเลข</code>, E=link</span></li>
+        </ul>
+      </div>
+      <div class="cat ask">
+        <div class="badge badge-ask">Ask user → or skip</div>
+        <div class="cat-name">shipping-cost</div>
+        <ul class="step-list">
+          <li><div class="num">1</div><span>Confirm category → bot asks "พิมพ์เลข RECV:"</span></li>
+          <li><div class="num">2</div><span>User types RECV No. → update sheet col H</span></li>
+          <li><div class="num">3</div><span>User types <code>skip</code> → append row B=<code>รอเลข</code>, H=link</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: Side by side flow -->
+  <div class="section">
+    <div class="section-title">2 · Flow comparison after user confirms category</div>
+    <div class="two-col">
+      <div>
+        <div class="col-label label-auto">recv-pos — auto, no reply needed</div>
+        <div class="flow">
+          <div class="fstep shared">
+            <div class="fstep-title">User taps ✅ RECV(POS)</div>
+            <div class="fstep-detail">Postback: action=save, category=recv-pos</div>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="fstep auto">
+            <div class="fstep-title">Immediately: download + upload to Drive</div>
+            <div class="fstep-detail">No Redis state. No waiting for user reply.</div>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="fstep auto">
+            <div class="fstep-title">updateSheetLink(billNo, 'recv-pos', ...)</div>
+            <div class="fstep-detail"><code>billNo</code> from Gemini = เลขที่เอกสาร<br>Col B = hyperlink, C = branch, D = dealer</div>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="fstep done">
+            <div class="fstep-title">✅ บันทึกแล้ว</div>
+            <div class="fstep-detail">One tap, done. No extra message.</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="col-label label-ask">invoice / shipping-cost — ask + skip</div>
+        <div class="flow">
+          <div class="fstep shared">
+            <div class="fstep-title">User taps category button</div>
+            <div class="fstep-detail">Postback: action=save, category=invoice/shipping-cost</div>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="fstep ask">
+            <div class="fstep-title">Store Redis + ask for RECV No.</div>
+            <div class="fstep-detail">"พิมพ์เลข RECV (หรือ skip ถ้ายังไม่มี):"</div>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="fstep ask">
+            <div class="fstep-title">User replies</div>
+            <div class="fstep-detail">
+              Typed RECV → upload + sheet (normal)<br>
+              Typed <code>skip</code> → upload + append B=<code>รอเลข</code>
+            </div>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="fstep done">
+            <div class="fstep-title">✅ บันทึกแล้ว</div>
+            <div class="fstep-detail">Two steps: confirm + reply.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 3: Confirmation message update -->
+  <div class="section">
+    <div class="section-title">3 · Confirmation message for recv-pos (show extracted RECV so user can verify)</div>
+    <div class="line-msg">
+      <div class="label">LINE bot message</div>
+      <div class="bubble">
+        📄 AI จัดหมวดเป็น: RECV(POS)<br>
+        🔢 เลข RECV: <span class="recv-hi">RECV 988</span><br>
+        🏢 สาขา: 001<br>
+        🏪 ร้าน: CT Music Shop<br>
+        📝 ชื่อไฟล์: CT Music Shop_26.03.69_6344฿.jpg<br>
+        ถูกต้องไหม? กดเพื่อบันทึก:
+      </div>
+      <div style="font-size:11px;color:#475569;">User sees the extracted RECV No. before confirming — can cancel if wrong</div>
+    </div>
+  </div>
+
+  <!-- Section 4: Code changes -->
+  <div class="section">
+    <div class="section-title">4 · Code changes (api/webhook.js)</div>
+
+    <p style="font-size:12px;color:#64748b;margin-bottom:10px;"><strong style="color:#94a3b8;">Change 1 — sendConfirmation:</strong> add RECV No. line to recv-pos confirmation message</p>
+    <div class="code-box" style="margin-bottom:14px;">
+<span class="keep">// in sendConfirmation(...)</span>
+<span class="keep">const proposed = buildFilename(dealer, date, amount, mimeType);</span>
+<span class="add">const recvLine = category === 'recv-pos' && billNo ? `\n🔢 เลข RECV: ${billNo}` : '';</span>
+<span class="keep">text: `📄 AI จัดหมวดเป็น: ${catLabel[category]}</span><span class="add">${recvLine}</span><span class="keep">\n📝 ชื่อไฟล์: ${proposed}\nถูกต้องไหม?`</span>
+    </div>
+
+    <p style="font-size:12px;color:#64748b;margin-bottom:10px;"><strong style="color:#94a3b8;">Change 2 — handlePostback:</strong> recv-pos skips Redis, uploads + updates sheet immediately</p>
+    <div class="code-box" style="margin-bottom:14px;">
+<span class="rem">// BEFORE</span>
+<span class="keep">const SHEET_LINKED = ['invoice', 'recv-pos', 'shipping-cost'];</span>
+<span class="keep">if (SHEET_LINKED.includes(category)) {</span>
+<span class="keep">  await redisSet(`recv_pending:${userId}`, { ... }, 300);</span>
+<span class="keep">  await sendLineReply(replyToken, '📋 พิมพ์เลข POS/RECV ...');</span>
+<span class="keep">  return;</span>
+<span class="keep">}</span>
+
+<span class="add">// AFTER</span>
+<span class="add">const SHEET_LINKED = ['invoice', 'shipping-cost']; // recv-pos removed</span>
+<span class="add">if (category === 'recv-pos') {</span>
+<span class="add">  // RECV No. already extracted by Gemini — upload and update sheet immediately</span>
+<span class="add">  const { fileBytes, mimeType: ft } = await downloadByMessageId(messageId);</span>
+<span class="add">  const fname = customFilename || buildFilename(dealer, date, amount, ft);</span>
+<span class="add">  const { uploadedName, fileId } = await uploadToDrive(fileBytes, ft, fname, 'recv-pos');</span>
+<span class="add">  await updateSheetLink(billNo, 'recv-pos', fileId, billNo, branch, dealer, amount);</span>
+<span class="add">  await sendLineReply(replyToken, `✅ บันทึกแล้ว: recv-pos → ${uploadedName}`);</span>
+<span class="add">  return;</span>
+<span class="add">}</span>
+<span class="keep">if (SHEET_LINKED.includes(category)) { // invoice + shipping-cost only</span>
+<span class="keep">  await redisSet(`recv_pending:${userId}`, { ... }, 300);</span>
+<span class="keep">  await sendLineReply(replyToken, '📋 พิมพ์เลข RECV (หรือ skip ถ้ายังไม่มี):');</span>
+<span class="keep">  return;</span>
+<span class="keep">}</span>
+    </div>
+
+    <p style="font-size:12px;color:#64748b;margin-bottom:10px;"><strong style="color:#94a3b8;">Change 3 — handleTextReply:</strong> skip → append รอเลข (invoice/shipping-cost only now)</p>
+    <div class="code-box">
+<span class="keep">if (recvNo.toLowerCase() !== 'skip') {</span>
+<span class="keep">  await updateSheetLink(recvNo, category, fileId, billNo, branch, dealer, amount);</span>
+<span class="rem">}</span>
+<span class="add">} else {</span>
+<span class="add">  await updateSheetLink('รอเลข', category, fileId, billNo, branch, dealer, amount);</span>
+<span class="add">}</span>
+    </div>
+  </div>
+
+</body>
+</html>
