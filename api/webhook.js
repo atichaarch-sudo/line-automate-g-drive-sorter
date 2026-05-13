@@ -135,6 +135,56 @@ async function handlePostback(event) {
   const SHEET_LINKED = ['invoice', 'shipping-cost'];
   const { messageId, category, dealer, date, amount, filename: customFilename, branch, billNo } = data;
 
+  if (category === 'expense') {
+    try {
+      const { fileBytes, mimeType: ft } = await downloadByMessageId(messageId);
+      const fname = customFilename || buildFilename(dealer, date, amount, ft);
+      const { uploadedName, fileId } = await uploadToDrive(fileBytes, ft, fname, 'expense');
+      try {
+        const description = await extractExpenseDescription(fileBytes, ft);
+        const expNo = await writeExpenseRow(date, billNo, dealer, description, amount, fileId);
+        await sendLineReply(replyToken, `✅ บันทึกแล้ว: expense → ${uploadedName}\n🔢 Expense No.: ${expNo}`);
+      } catch (e) {
+        console.error('ExpenseSheet error:', e);
+        await sendLineReply(replyToken, `✅ บันทึกแล้ว: expense → ${uploadedName}`);
+      }
+    } catch (err) {
+      console.error('handlePostback expense error:', err);
+      if (userId) await sendLinePush(userId, classifyError(err));
+    }
+    return;
+  }
+
+  if (category === 'slip-bank') {
+    try {
+      const { fileBytes, mimeType: ft } = await downloadByMessageId(messageId);
+      const fname = customFilename || buildFilename(dealer, date, amount, ft);
+      const { uploadedName, fileId } = await uploadToDrive(fileBytes, ft, fname, 'slip-bank');
+      await redisSet(`slip_pending:${userId}`, { fileId }, 300);
+      await fetch('https://api.line.me/v2/bot/message/reply', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${process.env.LINE_CHANNEL_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          replyToken,
+          messages: [{
+            type: 'text',
+            text: `✅ บันทึกแล้ว: slip-bank → ${uploadedName}\n📎 พิมพ์ Expense No. เพื่อลิงก์สลิปนี้ (เช่น EXP003)`,
+            quickReply: {
+              items: [{
+                type: 'action',
+                action: { type: 'message', label: '⏭️ Skip', text: 'skip' },
+              }],
+            },
+          }],
+        }),
+      });
+    } catch (err) {
+      console.error('handlePostback slip-bank error:', err);
+      if (userId) await sendLinePush(userId, classifyError(err));
+    }
+    return;
+  }
+
   if (category === 'recv-pos') {
     try {
       const { fileBytes, mimeType: ft } = await downloadByMessageId(messageId);
@@ -153,7 +203,23 @@ async function handlePostback(event) {
   if (SHEET_LINKED.includes(category)) {
     try {
       await redisSet(`recv_pending:${userId}`, { messageId, category, branch, billNo, dealer, date, amount, customFilename }, 300);
-      await sendLineReply(replyToken, '📋 พิมพ์เลข RECV เพื่อลิงก์ในชีท\n(หรือพิมพ์ "skip" ถ้ายังไม่มีเลข)');
+      await fetch('https://api.line.me/v2/bot/message/reply', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${process.env.LINE_CHANNEL_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          replyToken,
+          messages: [{
+            type: 'text',
+            text: '📋 พิมพ์เลข RECV เพื่อลิงก์ในชีท\n(หรือกด Skip ถ้ายังไม่มีเลข)',
+            quickReply: {
+              items: [{
+                type: 'action',
+                action: { type: 'message', label: '⏭️ Skip (รอเลข)', text: 'skip' },
+              }],
+            },
+          }],
+        }),
+      });
     } catch (err) {
       console.error('handlePostback recv_pending error:', err);
       if (userId) await sendLinePush(userId, classifyError(err));
@@ -252,7 +318,26 @@ async function handleTextReply(event) {
   const userId = source?.userId;
   if (!userId) return;
 
-  // Check recv_pending first — user typed a RECV/POS number after confirming a sheet-linked category
+  // Check slip_pending — user typed an Expense No. to link a slip-bank file
+  const slipPending = await redisGet(`slip_pending:${userId}`);
+  if (slipPending) {
+    const expNo = message.text.trim();
+    await redisDel(`slip_pending:${userId}`);
+    if (expNo.toLowerCase() === 'skip') {
+      await sendLineReply(replyToken, '⏭️ ข้ามการลิงก์สลิป');
+    } else {
+      try {
+        await updateExpenseSlip(expNo, slipPending.fileId);
+        await sendLineReply(replyToken, `✅ ลิงก์สลิปกับ ${expNo.toUpperCase()} แล้ว`);
+      } catch (e) {
+        console.error('updateExpenseSlip error:', e);
+        await sendLineReply(replyToken, `⚠️ ไม่พบ ${expNo} ในชีท กรุณาตรวจสอบเลข Expense No.`);
+      }
+    }
+    return;
+  }
+
+  // Check recv_pending — user typed a RECV/POS number after confirming a sheet-linked category
   const recvPending = await redisGet(`recv_pending:${userId}`);
   if (recvPending) {
     const recvNo = message.text.trim();
@@ -273,6 +358,16 @@ async function handleTextReply(event) {
         );
       }
       await sendLineReply(replyToken, `✅ บันทึกแล้ว: ${category} → ${uploadedName}`);
+      if (category === 'invoice') {
+        const effectiveRecv = recvNo.toLowerCase() === 'skip' ? 'รอเลข' : recvNo;
+        try {
+          const items = await extractInvoiceLineItems(fileBytes, mimeType);
+          const recvFormatted = effectiveRecv === 'รอเลข' ? 'รอเลข' : `RECV ${effectiveRecv}`;
+          await writeInvoiceDetails(recvFormatted, branch, dealer, date, items);
+        } catch (e) {
+          console.error('InvoiceDetails error:', e);
+        }
+      }
     } catch (err) {
       console.error('handleTextReply recv_pending error:', err);
       if (userId) await sendLinePush(userId, classifyError(err));
@@ -422,6 +517,22 @@ async function downloadByMessageId(messageId) {
   return { fileBytes, mimeType };
 }
 
+// Parse amount string to a plain number Sheets can sum/format (handles decimals, stray symbols)
+function parseAmount(s) {
+  if (s === null || s === undefined || s === '') return '';
+  const n = parseFloat(String(s).replace(/[^0-9.]/g, ''));
+  return isNaN(n) ? '' : n;
+}
+
+// Convert "DD.MM.YY" → "DD/MM/YYYY" so Sheets recognises it as a date
+function expandDate(ddmmyy) {
+  if (!ddmmyy) return '';
+  const parts = String(ddmmyy).split('.');
+  if (parts.length !== 3) return ddmmyy;
+  const [dd, mm, yy] = parts;
+  return `${dd}/${mm}/20${yy}`;
+}
+
 function buildFilename(dealer, date, amount, mimeType) {
   const ext = (mimeType || '').includes('pdf') ? 'pdf' : 'jpg';
   const safe = s => (s || '').replace(/[/\\:*?"<>|]/g, '').trim();
@@ -454,29 +565,73 @@ async function classifyAndExtract(fileBytes, mimeType) {
             },
           },
           {
-            text:
-              'You are analyzing a Thai business document for a music instrument shop.\n\n' +
-              'Classify the document and extract key fields:\n\n' +
-              'CATEGORY — pick exactly one:\n' +
-              '- "expense": ค่าใช้จ่ายทั่วไปของบริษัท เช่น ค่าน้ำ ค่าไฟ ค่าเช่า ค่าซ่อม ใบเสร็จรับเงินทั่วไปที่ร้านจ่ายออก\n' +
-              '- "shipping-cost": ค่าขนส่ง ค่าส่งพัสดุ ใบเสร็จจากบริษัทขนส่ง เช่น Kerry, Flash, EMS, Nim\n' +
-              '- "invoice": ใบแจ้งหนี้ / ใบกำกับภาษี จากซัพพลายเออร์ที่ขายสินค้าให้ร้าน\n' +
-              '- "slip-bank": สลิปโอนเงิน ภาพหน้าจอการโอนเงินผ่านแอปธนาคาร รายการธนาคาร\n' +
-              '- "recv-pos": ใบเสร็จรับเงินจากการขาย POS receipt ใบเสร็จที่ร้านออกให้ลูกค้า\n' +
-              '- "etc": อื่นๆ ที่ไม่ใช่หมวดข้างต้น\n\n' +
-              'DEALER — the company or customer name (ชื่อบริษัท/ลูกค้า). Use a short recognizable name, omit "Co.,Ltd" / "จำกัด" suffixes.\n\n' +
-              'DATE — document date in DD.MM.YY format using Buddhist Era year (e.g. 29.04.69 for 29 April 2569). If the year looks like 2025/2026, convert: subtract 543 to get BE year, take last 2 digits.\n\n' +
-              'AMOUNT — the grand total as digits only, no currency symbol or commas (e.g. 10408).\n\n' +
-              'BRANCH — the branch code from the "สาขา" field. Return the numeric code only (e.g. "001" from "001:สาขาพิษณุโลก"). Leave empty string if not present.\n\n' +
-              'BILL_NO — the invoice or bill number printed on the document (e.g. "INV2260101289"). Leave empty string if not present.\n\n' +
-              'Reply with valid JSON only, no explanation.\n' +
-              'Format: {"category":"<category>","dealer":"<dealer>","date":"<DD.MM.YY>","amount":"<amount>","branch":"<branch>","bill_no":"<bill_no>"}',
+            text: [
+              'You are a document classifier for PolMusic, a Thai music instrument shop (branches: Lampang, Phitsanulok).',
+              'Analyze the image and fill every JSON field below.',
+              '',
+              '── CATEGORY ──────────────────────────────────────────────────',
+              'Check rules IN ORDER. Use the FIRST match.',
+              '',
+              '1. "recv-pos"      Header reads "ใบรับสินค้า" AND doc number starts with RECV (e.g. RECV 1032).',
+              '                   This is an internal store document — NOT a supplier invoice.',
+              '2. "slip-bank"     Bank / PromptPay transfer confirmation from a mobile banking app.',
+              '3. "shipping-cost" Receipt from a courier: Kerry, Flash, J&T, EMS, Thailand Post, Nim, Alpha Fast.',
+              '4. "invoice"       ใบแจ้งหนี้ / ใบกำกับภาษี FROM a music supplier TO the shop',
+              '                   (seller = supplier, buyer = Polmusic branch, goods = instruments / accessories).',
+              '5. "expense"       Bill the shop pays for its own operations:',
+              '                   AIS / True / DTAC, PEA / MEA electricity, water, rent, repair, insurance, etc.',
+              '                   ⚠ A utility ใบกำกับภาษี (AIS, ค่าไฟ, ค่าน้ำ) is "expense", NOT "invoice".',
+              '6. "etc"           None of the above.',
+              '',
+              '── DEALER ────────────────────────────────────────────────────',
+              '• slip-bank  → recipient name (ผู้รับเงิน / ปลายทาง / To).',
+              '• others     → value next to / below "ชื่อบริษัท/ร้านค้า" label; if absent, the issuing company.',
+              '• NEVER return a Polmusic branch ("Polmusic Lampang", "Polmusic Phitsanulok", "พลมิวสิค").',
+              '• Remove "Co.,Ltd" / "จำกัด" suffixes.',
+              '',
+              '── DATE ──────────────────────────────────────────────────────',
+              'Return as DD.MM.YY using the LAST 2 DIGITS of the C.E. year.',
+              'Thai docs may use B.E. (พ.ศ.) = C.E. + 543. Convert:',
+              '  4-digit 2500-2599 (B.E.) → subtract 543  e.g. 2569→2026→"26"',
+              '  4-digit 2000-2099 (C.E.) → last 2 digits  e.g. 2026→"26"',
+              '  2-digit 60-99    (B.E.) → subtract 43    e.g. 69→26',
+              '  2-digit 00-59    (C.E.) → use as-is       e.g. 26→"26"',
+              'Examples: 10/05/2569→"10.05.26" | 27/02/2026→"27.02.26" | 28/03/69→"28.03.26"',
+              '',
+              '── AMOUNT ────────────────────────────────────────────────────',
+              '• recv-pos → "รวมทั้งหมด" field.',
+              '• others   → final grand total (after VAT if present).',
+              'Digits and ONE decimal point only. No symbols, no commas.',
+              'Examples: 49320 | 640.93 | 1234.50  ← preserve the decimal, do NOT drop it.',
+              '',
+              '── BRANCH ────────────────────────────────────────────────────',
+              'Numeric code from "สาขา" field only. e.g. "001" from "001:สาขาพิษณุโลก".',
+              'Empty string if absent.',
+              '',
+              '── BILL_NO ───────────────────────────────────────────────────',
+              '• recv-pos   → "เลขที่เอกสาร" value (e.g. "RECV 1032").',
+              '• slip-bank  → transaction ref / เลขที่อ้างอิง / Ref No. (shortest if multiple).',
+              '• others     → invoice or receipt number on the document.',
+              'Empty string if absent.',
+            ].join('\n'),
           },
         ],
       },
     ],
     generationConfig: {
       response_mime_type: 'application/json',
+      response_schema: {
+        type: 'OBJECT',
+        properties: {
+          category: { type: 'STRING', enum: ['expense', 'shipping-cost', 'invoice', 'slip-bank', 'recv-pos', 'etc'] },
+          dealer:   { type: 'STRING' },
+          date:     { type: 'STRING' },
+          amount:   { type: 'STRING' },
+          branch:   { type: 'STRING' },
+          bill_no:  { type: 'STRING' },
+        },
+        required: ['category', 'dealer', 'date', 'amount', 'branch', 'bill_no'],
+      },
       temperature: 0,
     },
   };
@@ -649,7 +804,10 @@ async function updateSheetLink(recvNo, category, fileId, billNo, branch, dealer,
   // Normalize: "RECV 988", "RECV988", "988" all match the same row
   const normalize = s => String(s).replace(/\s+/g, '').replace(/^(recv|pos)/i, '').toLowerCase();
   const normalizedRecv = normalize(recvNo);
-  const rowIndex = rows.findIndex(r => normalize(r[0] || '') === normalizedRecv);
+  // 'รอเลข' is a placeholder — multiple docs share it, so never overwrite; always append
+  const rowIndex = normalizedRecv === 'รอเลข'
+    ? -1
+    : rows.findIndex(r => normalize(r[0] || '') === normalizedRecv);
 
   const linkCol = category === 'invoice' ? 'E' : category === 'recv-pos' ? 'B' : 'H';
   const displayText = category === 'invoice' ? (billNo || recvNo) : category === 'shipping-cost' ? (amount || recvNo) : recvNo;
@@ -663,7 +821,7 @@ async function updateSheetLink(recvNo, category, fileId, billNo, branch, dealer,
       data.push({ range: `${tabName}!C${rowNum}`, values: [[branch || '']] });
       data.push({ range: `${tabName}!D${rowNum}`, values: [[dealer || '']] });
     } else if (category === 'invoice') {
-      data.push({ range: `${tabName}!F${rowNum}`, values: [[amount || '']] });
+      data.push({ range: `${tabName}!F${rowNum}`, values: [[parseAmount(amount)]] });
     }
     const batchResp = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
@@ -688,7 +846,7 @@ async function updateSheetLink(recvNo, category, fileId, billNo, branch, dealer,
     } else if (category === 'invoice') {
       newRow[1] = recvNo;        // B: raw RECV (primary key)
       newRow[4] = formula;       // E: invoice hyperlink
-      newRow[5] = amount || '';  // F: invoice amount
+      newRow[5] = parseAmount(amount);  // F: invoice amount
     } else {
       newRow[1] = recvNo;        // B: raw RECV (primary key)
       newRow[7] = formula;       // H: shipping-cost hyperlink
@@ -701,10 +859,264 @@ async function updateSheetLink(recvNo, category, fileId, billNo, branch, dealer,
         body: JSON.stringify({ values: [newRow] }),
       }
     );
-    if (!appendResp.ok) {
-      const errText = await appendResp.text();
-      throw new Error(`Sheets append failed: ${appendResp.status} — ${errText}`);
+    const appendText = await appendResp.text();
+    if (!appendResp.ok) throw new Error(`Sheets append failed: ${appendResp.status} — ${appendText}`);
+    const appendJson = JSON.parse(appendText);
+    const updatedRange = appendJson.updates?.updatedRange;
+    const rowMatch = updatedRange?.match(/(\d+):/);
+    const appendedRowIndex = rowMatch ? parseInt(rowMatch[1]) - 1 : null;
+
+    if (category === 'recv-pos' && appendedRowIndex !== null) {
+      try {
+        const sheetNumId = await getSheetNumericId(accessToken, spreadsheetId, tabName);
+        if (sheetNumId !== null) await clearRowFormatting(accessToken, spreadsheetId, sheetNumId, appendedRowIndex);
+      } catch (e) {
+        console.warn('Row formatting clear failed (non-critical):', e.message);
+      }
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Extract invoice line items via Gemini — returns [] on any failure
+// ---------------------------------------------------------------------------
+async function extractInvoiceLineItems(fileBytes, mimeType) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+  const payload = {
+    contents: [{
+      parts: [
+        { inline_data: { mime_type: mimeType, data: arrayBufferToBase64(fileBytes) } },
+        {
+          text:
+            'Extract all line items from this invoice.\n' +
+            'Return a JSON array of objects. Each object must have exactly:\n' +
+            '{"item_name": "<product name>", "qty": <number>, "cost": <number>}\n' +
+            'qty and cost must be numbers, not strings. cost is the unit price or line total as printed.\n' +
+            'If no line items found, return []. Reply with valid JSON array only, no explanation.',
+        },
+      ],
+    }],
+    generationConfig: { response_mime_type: 'application/json', temperature: 0 },
+  };
+
+  try {
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) return [];
+    const json = await resp.json();
+    const rawText = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]')
+      .replace(/```json\n?|\n?```/g, '').trim();
+    const parsed = JSON.parse(rawText);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Append extracted line items to InvoiceDetails tab — creates tab if missing
+// ---------------------------------------------------------------------------
+async function writeInvoiceDetails(recvNo, branch, invoiceName, date, lineItems) {
+  if (!lineItems.length) return;
+
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+  const detailsTab = 'Invoice-List';
+  const accessToken = await getAccessToken();
+
+  // Auto-create tab if it doesn't exist
+  const metaResp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (metaResp.ok) {
+    const meta = await metaResp.json();
+    const exists = (meta.sheets || []).some(s => s.properties.title === detailsTab);
+    if (!exists) {
+      const addResp = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requests: [{ addSheet: { properties: { title: detailsTab } } }] }),
+        }
+      );
+      if (!addResp.ok) {
+        const errText = await addResp.text();
+        throw new Error(`InvoiceDetails tab creation failed ${addResp.status}: ${errText}`);
+      }
+    }
+  }
+
+  const rows = lineItems.map(item => [
+    date || '',            // A: วันที่
+    recvNo || '',          // B: RECV No.
+    branch || '',          // C: จัดส่ง (branch)
+    invoiceName || '',     // D: สั่งจาก (supplier/dealer)
+    item.item_name || '',  // E: รายการ (item name)
+    parseAmount(item.qty),   // F: จำนวน (qty)
+    parseAmount(item.cost),  // G: ราคาส่ง (cost)
+  ]);
+
+  const appendResp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(detailsTab + '!A:G')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: rows }),
+    }
+  );
+  if (!appendResp.ok) {
+    const errText = await appendResp.text();
+    throw new Error(`InvoiceDetails append failed ${appendResp.status}: ${errText}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Extract a brief expense description via Gemini
+// ---------------------------------------------------------------------------
+async function extractExpenseDescription(fileBytes, mimeType) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+  const payload = {
+    contents: [{
+      parts: [
+        { inline_data: { mime_type: mimeType, data: arrayBufferToBase64(fileBytes) } },
+        {
+          text:
+            'This is a Thai expense receipt. Write a short description of what this expense is for (max 60 chars).\n' +
+            'Examples: "ค่าไฟฟ้า", "ค่าน้ำประปา", "ค่าเช่า", "ค่าซ่อมแอร์", "ค่าอินเทอร์เน็ต"\n' +
+            'Reply with valid JSON only: {"description": "<text>"}',
+        },
+      ],
+    }],
+    generationConfig: { response_mime_type: 'application/json', temperature: 0 },
+  };
+
+  try {
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) return '';
+    const json = await resp.json();
+    const rawText = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}')
+      .replace(/```json\n?|\n?```/g, '').trim();
+    const parsed = JSON.parse(rawText);
+    return parsed.description || '';
+  } catch {
+    return '';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Append one expense row to the Expense-List tab
+// Columns: A=Expense No. B=date C=Bill No.(link) D=provider E=list F=amount G=Slip-Bank
+// Returns the generated Expense No. (e.g. "EXP003")
+// ---------------------------------------------------------------------------
+async function writeExpenseRow(date, billNo, dealer, description, amount, fileId) {
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+  const tab = 'Expense-List';
+  const accessToken = await getAccessToken();
+
+  const metaResp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (metaResp.ok) {
+    const meta = await metaResp.json();
+    const exists = (meta.sheets || []).some(s => s.properties.title === tab);
+    if (!exists) {
+      await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requests: [{ addSheet: { properties: { title: tab } } }] }),
+        }
+      );
+    }
+  }
+
+  // Determine next Expense No. by reading column A
+  const colAResp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tab + '!A:A')}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  let nextNum = 1;
+  if (colAResp.ok) {
+    const colAJson = await colAResp.json();
+    const nums = (colAJson.values || [])
+      .slice(1) // skip header row
+      .map(r => parseInt(String(r[0] || '').replace(/\D/g, ''), 10))
+      .filter(n => !isNaN(n));
+    if (nums.length > 0) nextNum = Math.max(...nums) + 1;
+  }
+  const expNo = `EXP${String(nextNum).padStart(3, '0')}`;
+
+  const driveUrl = `https://drive.google.com/file/d/${fileId}/view`;
+  const billCell = fileId
+    ? `=HYPERLINK("${driveUrl}","${(billNo || 'ดูไฟล์').replace(/"/g, '')}")`
+    : (billNo || '');
+
+  const appendResp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tab + '!A:G')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [[expNo, expandDate(date), billCell, dealer || '', description || '', parseAmount(amount), '']] }),
+    }
+  );
+  if (!appendResp.ok) {
+    const errText = await appendResp.text();
+    throw new Error(`Expense sheet append failed ${appendResp.status}: ${errText}`);
+  }
+  return expNo;
+}
+
+// ---------------------------------------------------------------------------
+// Find an expense row by Expense No. (col A) and write a slip hyperlink to col G
+// ---------------------------------------------------------------------------
+async function updateExpenseSlip(expNo, fileId) {
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+  const tab = 'Expense-List';
+  const accessToken = await getAccessToken();
+
+  const resp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tab + '!A:A')}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!resp.ok) throw new Error(`Sheets read failed: ${resp.status}`);
+  const json = await resp.json();
+  const rows = json.values || [];
+
+  // Match "EXP003", "exp003", "3", "003" all to the same row
+  const normalizeExp = s => String(s).replace(/\s+/g, '').replace(/^exp/i, '').replace(/^0+/, '').toLowerCase() || '0';
+  const target = normalizeExp(expNo);
+  const rowIndex = rows.findIndex(r => normalizeExp(r[0] || '') === target);
+  if (rowIndex < 1) throw new Error(`Expense No. not found: ${expNo}`);
+
+  const rowNum = rowIndex + 1;
+  const driveUrl = `https://drive.google.com/file/d/${fileId}/view`;
+  const formula = `=HYPERLINK("${driveUrl}","สลิป")`;
+
+  const updateResp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tab + `!G${rowNum}`)}?valueInputOption=USER_ENTERED`,
+    {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [[formula]] }),
+    }
+  );
+  if (!updateResp.ok) {
+    const errText = await updateResp.text();
+    throw new Error(`Expense slip update failed: ${updateResp.status} — ${errText}`);
   }
 }
 
@@ -734,6 +1146,47 @@ function classifyError(err) {
     return '❌ LINE API: ดาวน์โหลดไฟล์ไม่สำเร็จ กรุณาลองใหม่';
   }
   return '❌ เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ กรุณาลองใหม่';
+}
+
+// ---------------------------------------------------------------------------
+// Get numeric sheetId for a tab name — required by the Sheets formatting API
+// ---------------------------------------------------------------------------
+async function getSheetNumericId(accessToken, spreadsheetId, sheetName) {
+  const resp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!resp.ok) return null;
+  const json = await resp.json();
+  const sheet = (json.sheets || []).find(s => s.properties.title === sheetName);
+  return sheet?.properties?.sheetId ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Reset a row's background to white and text to plain black
+// ---------------------------------------------------------------------------
+async function clearRowFormatting(accessToken, spreadsheetId, sheetId, rowIndex) {
+  await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [{
+          repeatCell: {
+            range: { sheetId, startRowIndex: rowIndex, endRowIndex: rowIndex + 1 },
+            cell: {
+              userEnteredFormat: {
+                backgroundColor: { red: 1, green: 1, blue: 1 },
+                textFormat: { bold: false, foregroundColor: { red: 0, green: 0, blue: 0 } },
+              },
+            },
+            fields: 'userEnteredFormat(backgroundColor,textFormat)',
+          },
+        }],
+      }),
+    }
+  );
 }
 
 // ---------------------------------------------------------------------------
